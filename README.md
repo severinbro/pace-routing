@@ -1,6 +1,7 @@
 # PACE: Personalized Assessment of Comfort for Explainable Routing
 
 🚧 Project Status: Under Construction 🚧 
+
 The PACE software ecosystem, including the containerized edge-processing environment and the GraphSAGE data fusion scripts, is currently undergoing final refinement. This repository is being prepared for upcoming empirical field trials.
 
 ## Project Overview 🔍
