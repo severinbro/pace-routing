@@ -1,4 +1,4 @@
-# PACE: Personalized Assessment of Comfort for Explainable Routing
+# PACE: Personalized Assessment of Urban Comfort for Explainable Routing
 
 🚧 Project Status: Under Construction 🚧 
 
