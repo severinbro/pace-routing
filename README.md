@@ -77,8 +77,7 @@ cd pace-routing
 
 ```
 
-
-2. **Download Offline Map Tiles:** To use the map in the field without the internet, you must download the offline map tiles. Place the exported tile folder (or `.mbtiles` file) directly into the `./tiles/` directory in the project root.
+2. To use the map in the field without the internet, you must download the OpenStreetMap data for your target region and name it region.osm.pbf (e.g. download from [Geofabrik](https://www.geofabrik.de/)). Place this file directly into the ./data/maps/ directory in the project root. The container's internal map creation process will parse this data upon startup.
 
 ### 4. Launch the System
 
