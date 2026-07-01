@@ -2,31 +2,31 @@ services:
   # 1. Permanent Database (PosgreSQL)
   db:
     image: postgres:15-alpine
-    container_name: elderpace_db
+    container_name: pace_db
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=elderpace
-      - POSTGRES_USER=elderpace
-      - POSTGRES_PASSWORD=elderpace
+      - POSTGRES_DB=pace
+      - POSTGRES_USER=pace
+      - POSTGRES_PASSWORD=pace
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
-      - elderpace_net
+      - pace_net
 
   # 2. Real-time Message Broker
   redis:
     image: redis:7-alpine
-    container_name: elderpace_redis
+    container_name: pace_redis
     restart: unless-stopped
     networks:
-      - elderpace_net
+      - pace_net
 
   # 3. Offline Map Server
   tileserver:
     image: overv/openstreetmap-tile-server:latest
-    container_name: elderpace_tiles
+    container_name: pace_tiles
     platform: linux/arm64
     restart: unless-stopped
     shm_size: '512mb'
@@ -40,12 +40,12 @@ services:
     environment:
       - OSM2PGSQL_CACHE=2048 
     networks:
-      - elderpace_net
+      - pace_net
 
   # 4. Django Web Application
   web:
     build: .
-    container_name: elderpace_web
+    container_name: pace_web
     restart: unless-stopped
     command: >
       sh -c "echo 'Waiting for database...' && 
@@ -53,7 +53,7 @@ services:
              echo 'Database is ready, running migrations...' && 
              python manage.py migrate --noinput && 
              echo 'Starting Gunicorn server...' && 
-             gunicorn elderpace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
+             gunicorn pace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
     volumes:
       - .:/code
       - ./data/media:/code/media
@@ -64,12 +64,12 @@ services:
       - redis
     privileged: true
     networks:
-      - elderpace_net
+      - pace_net
 
   # 5. Background Sensor Worker
   sensor_worker:
     build: .
-    container_name: elderpace_worker
+    container_name: pace_worker
     restart: unless-stopped
     command: python sensor_manager.py
     volumes:
@@ -84,18 +84,18 @@ services:
       - "/dev/snd:/dev/snd"          # Gives the container access to the USB mic
     privileged: true
     networks:
-      - elderpace_net
+      - pace_net
 
   # 6. Database Management UI
   pgadmin:
     image: dpage/pgadmin4
-    container_name: elderpace_pgadmin
+    container_name: pace_pgadmin
     user: root
     platform: linux/arm64
     restart: unless-stopped
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@elderpace.io
-      - PGADMIN_DEFAULT_PASSWORD=elderpace
+      - PGADMIN_DEFAULT_EMAIL=admin@pace.io
+      - PGADMIN_DEFAULT_PASSWORD=pace
       - PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY=False # Force bypass check
     volumes:
       - ./data/pgadmin_data:/var/lib/pgadmin
@@ -104,12 +104,12 @@ services:
     depends_on:
       - db
     networks:
-      - elderpace_net
+      - pace_net
 
   # 7. Background Task: Database Writer
   db_writer:
     build: .
-    container_name: elderpace_db_writer
+    container_name: pace_db_writer
     restart: unless-stopped
     command: python manage.py save_sensor_data
     volumes:
@@ -118,12 +118,12 @@ services:
       - redis
       - db
     networks:
-      - elderpace_net
+      - pace_net
 
   # 8. NGINX: Public Facing Proxy for Participants
   nginx:
     image: nginx:alpine
-    container_name: elderpace_nginx
+    container_name: pace_nginx
     restart: unless-stopped
     ports:
       - "80:80"  # Standard web traffic port
@@ -132,10 +132,10 @@ services:
     depends_on:
       - web
     networks:
-      - elderpace_net
+      - pace_net
 
 networks:
-  elderpace_net:
+  pace_net:
     driver: bridge
 
 volumes:
