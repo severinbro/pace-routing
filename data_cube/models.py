@@ -47,7 +47,7 @@ class ParticulateMeasurement(models.Model):
     pm25 = models.IntegerField(default=0)
     pm10 = models.IntegerField(default=0)
 
-# 6. Noise Level
+# 6. Noise Level (USB Microphone)
 class NoiseMeasurement(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     noise_db = models.FloatField(default=0.0)

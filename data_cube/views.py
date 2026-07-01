@@ -50,7 +50,7 @@ def api_latest_sensors(request):
         "tempC": 0.0, "humRH": 0.0, "preshPa": 0.0, 
         "aqi": 0, "eco2": 0, "tvoc": 0, 
         "ang": [0,0,0], "acc": [0,0,0],
-        "lat": 49.99, "lon": 8.24, "alt": 0, "sats": 0,
+        "lat": 0.0, "lon": 0.0, "alt": 0, "sats": 0,
         "pm1": 999, "pm25": 999, "pm10": 999,
         "noise": 0
     })
