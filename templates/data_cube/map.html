@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card overflow-hidden">
+    <div id="map" style="height: 80vh;"></div>
+</div>
+
+<script>
+    // 1. Initialize the Map
+    var map = L.map('map').setView([49.99, 8.24], 13);
+    
+    L.tileLayer('http://' + window.location.hostname + ':8080/tile/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: 'Offline RLP Map'
+    }).addTo(map);
+
+    // 2. Create the blue dot vector marker
+    var userMarker = L.circleMarker([49.99, 8.24], {
+        radius: 8,              // Size of the dot
+        fillColor: "#2A93EE",   // Classic GPS blue
+        fillOpacity: 1,         // Solid fill
+        color: "#FFFFFF",       // White border
+        weight: 3,              // Border thickness
+        opacity: 1              // Border opacity
+    }).addTo(map).bindPopup("Waiting for GPS...");
+
+    // 3. The Dedicated Map Fetch Function
+    function updateLiveMap() {
+        fetch('/api/latest-sensors/')
+            .then(res => res.json())
+            .then(data => {
+                // Ensure we have a valid fix before moving the marker
+                if (data.lat !== 0 && data.lon !== 0) {
+                    const newLatLng = [data.lat, data.lon];
+                    
+                    // Move the marker
+                    userMarker.setLatLng(newLatLng);
+                    
+                    // Update the popup to show satellite strength
+                    userMarker.setPopupContent(`<b>Live Fix</b><br>Satellites: ${data.sats}`);
+                    
+                    // Optional: Smoothly pan the camera to follow the user
+                    // (You can comment this out if you want to allow the user to drag the map around freely without snapping back)
+                    map.panTo(newLatLng);
+                }
+            })
+            .catch(err => console.error("Map fetch error:", err));
+    }
+
+    // 4. Ping the API every 1 second (1000 milliseconds)
+    setInterval(updateLiveMap, 1000);
+    
+    // Run it immediately once on load so we don't wait 1 second for the first update
+    updateLiveMap();
+</script>
+{% endblock %}

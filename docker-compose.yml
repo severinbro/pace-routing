@@ -1,0 +1,142 @@
+services:
+  # 1. Permanent Database (PosgreSQL)
+  db:
+    image: postgres:15-alpine
+    container_name: elderpace_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=elderpace
+      - POSTGRES_USER=elderpace
+      - POSTGRES_PASSWORD=elderpace
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - elderpace_net
+
+  # 2. Real-time Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: elderpace_redis
+    restart: unless-stopped
+    networks:
+      - elderpace_net
+
+  # 3. Offline Map Server
+  tileserver:
+    image: overv/openstreetmap-tile-server:latest
+    container_name: elderpace_tiles
+    platform: linux/arm64
+    restart: unless-stopped
+    shm_size: '512mb'
+    volumes:
+      - ./data/maps:/data
+      - ./data/nodes:/nodes  # Add this for RPi5 performance
+      - tile-db-data:/var/lib/postgresql/15/main
+    ports:
+      - "8080:80"
+    command: run
+    environment:
+      - OSM2PGSQL_CACHE=2048 
+    networks:
+      - elderpace_net
+
+  # 4. Django Web Application
+  web:
+    build: .
+    container_name: elderpace_web
+    restart: unless-stopped
+    command: >
+      sh -c "echo 'Waiting for database...' && 
+             while ! nc -z db 5432; do sleep 0.5; done && 
+             echo 'Database is ready, running migrations...' && 
+             python manage.py migrate --noinput && 
+             echo 'Starting Gunicorn server...' && 
+             gunicorn elderpace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
+    volumes:
+      - .:/code
+      - ./data/media:/code/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    privileged: true
+    networks:
+      - elderpace_net
+
+  # 5. Background Sensor Worker
+  sensor_worker:
+    build: .
+    container_name: elderpace_worker
+    restart: unless-stopped
+    command: python sensor_manager.py
+    volumes:
+      - .:/code
+    depends_on:
+      - db
+      - redis
+      - web
+    devices:
+      - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Bus
+      - "/dev/i2c-2:/dev/i2c-2"      # PMSA & GNSS Bus
+      - "/dev/snd:/dev/snd"          # Gives the container access to the USB mic
+    privileged: true
+    networks:
+      - elderpace_net
+
+  # 6. Database Management UI
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: elderpace_pgadmin
+    user: root
+    platform: linux/arm64
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@elderpace.io
+      - PGADMIN_DEFAULT_PASSWORD=elderpace
+      - PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY=False # Force bypass check
+    volumes:
+      - ./data/pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - elderpace_net
+
+  # 7. Background Task: Database Writer
+  db_writer:
+    build: .
+    container_name: elderpace_db_writer
+    restart: unless-stopped
+    command: python manage.py save_sensor_data
+    volumes:
+      - .:/code
+    depends_on:
+      - redis
+      - db
+    networks:
+      - elderpace_net
+
+  # 8. NGINX: Public Facing Proxy for Participants
+  nginx:
+    image: nginx:alpine
+    container_name: elderpace_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"  # Standard web traffic port
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - web
+    networks:
+      - elderpace_net
+
+networks:
+  elderpace_net:
+    driver: bridge
+
+volumes:
+  tile-db-data: # Define the named volume here

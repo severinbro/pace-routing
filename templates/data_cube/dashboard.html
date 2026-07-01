@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<script src="{% static 'js/chart.umd.js' %}"></script>
+
+<div class="container-fluid p-0">
+    <div class="row g-3 mb-3">
+        
+        <div class="col-md-4">
+            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
+                <h5 class="text-primary mb-3"><i class="bi bi-thermometer-half"></i> Atmosphere</h5>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                        <span class="text-muted">Temperature</span>
+                        <span class="fw-bold fs-5"><span id="temp">--</span> °C</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                        <span class="text-muted">Humidity</span>
+                        <span class="fw-bold fs-5"><span id="hum">--</span> %</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pt-2">
+                        <span class="text-muted">Pressure</span>
+                        <span class="fw-bold fs-5"><span id="pres">----</span> hPa</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
+                <h5 class="text-success mb-3"><i class="bi bi-wind"></i> Air Quality</h5>
+                <div class="text-center mb-3">
+                    <span class="badge rounded-pill bg-light text-dark border px-3 py-2" id="aqi-badge">
+                        Status: <span id="aqi-label">--</span>
+                    </span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                        <span class="text-muted">AQI Index</span>
+                        <span class="fw-bold fs-5" id="aqi">--</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                        <span class="text-muted">CO₂</span>
+                        <span class="fw-bold fs-5"><span id="co2">--</span> ppm</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pt-2">
+                        <span class="text-muted">TVOC</span>
+                        <span class="fw-bold fs-5"><span id="tvoc">--</span> ppb</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
+                <h5 class="text-info mb-3"><i class="bi bi-geo-alt-fill"></i> Position</h5>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted">Latitude</span>
+                    <span class="font-monospace fw-bold" id="lat">--</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted">Longitude</span>
+                    <span class="font-monospace fw-bold" id="lon">--</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-muted">Altitude</span>
+                    <span class="font-monospace fw-bold"><span id="alt">--</span> m</span>
+                </div>
+                <div style="height: 100px;">
+                    <canvas id="satsChart"></canvas>
+                </div>
+                <small class="text-center text-muted mt-1">Satellites in View</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        
+        <div class="col-md-12">
+            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
+                <h5 class="text-warning mb-4"><i class="bi bi-activity"></i> Motion & Orientation</h5>
+                <div class="row">
+                    <div class="col-md-6 border-end">
+                        <h6 class="text-center text-muted small text-uppercase">Acceleration (m/s²)</h6>
+                        <div style="height: 200px;"><canvas id="accelChart"></canvas></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center text-muted small text-uppercase">Rotation (Degrees)</h6>
+                        <div style="height: 200px;"><canvas id="gyroChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="row text-center mt-3 g-2">
+                    <div class="col-4 border-end"><small class="text-muted d-block">Pitch (X)</small><span class="fw-bold" id="angX">--</span>°</div>
+                    <div class="col-4 border-end"><small class="text-muted d-block">Roll (Y)</small><span class="fw-bold" id="angY">--</span>°</div>
+                    <div class="col-4"><small class="text-muted d-block">Yaw (Z)</small><span class="fw-bold" id="angZ">--</span>°</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+
+        <div class="col-md-6">
+            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
+                <h5 class="text-danger mb-3"><i class="bi bi-soundwave"></i> Noise Levels (dB)</h5>
+                <div class="d-flex justify-content-center align-items-end mb-3">
+                    <span class="display-4 fw-bold me-2" id="db-level">--</span>
+                    <span class="text-muted pb-2">dB</span>
+                </div>
+                <div style="height: 150px;">
+                    <canvas id="noiseChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
+                <h5 class="text-secondary mb-3"><i class="bi bi-mask"></i> Particulates (µg/m³)</h5>
+                <div class="d-flex justify-content-around text-center mb-3">
+                    <div>
+                        <small class="text-muted d-block">PM 1.0</small>
+                        <span class="fw-bold fs-5" id="pm1">--</span>
+                    </div>
+                    <div class="border-start border-end px-3">
+                        <small class="text-muted d-block">PM 2.5</small>
+                        <span class="fw-bold fs-5" id="pm25">--</span>
+                    </div>
+                    <div>
+                        <small class="text-muted d-block">PM 10</small>
+                        <span class="fw-bold fs-5" id="pm10">--</span>
+                    </div>
+                </div>
+                <div style="height: 150px;">
+                    <canvas id="pmChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Configuration for Charts
+    const MAX_DATA_POINTS = 30;
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        elements: { point: { radius: 0 }, line: { borderWidth: 2, tension: 0.3 } },
+        scales: { x: { display: false }, y: { beginAtZero: false } },
+        plugins: { legend: { position: 'top', labels: { boxWidth: 10 } } }
+    };
+
+    // 1. Accel Chart
+    const accelChart = new Chart(document.getElementById('accelChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [
+                { label: 'Acc X', borderColor: '#ff6384', data: [] },
+                { label: 'Acc Y', borderColor: '#36a2eb', data: [] },
+                { label: 'Acc Z', borderColor: '#cc65fe', data: [] }
+            ]
+        },
+        options: chartOptions
+    });
+
+    // 2. Gyro Chart
+    const gyroChart = new Chart(document.getElementById('gyroChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [
+                { label: 'Pitch', borderColor: '#ffce56', data: [] },
+                { label: 'Roll', borderColor: '#4bc0c0', data: [] },
+                { label: 'Yaw', borderColor: '#9966ff', data: [] }
+            ]
+        },
+        options: chartOptions
+    });
+
+    // 3. Noise Chart
+    const noiseChart = new Chart(document.getElementById('noiseChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [{ label: 'Decibels (dB)', borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.1)', data: [], fill: true }]
+        },
+        options: chartOptions
+    });
+
+    // 4. Satellites Chart
+    const satsChart = new Chart(document.getElementById('satsChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [{ 
+                label: 'Satellites', 
+                borderColor: '#0dcaf0', // Bootstrap Info Color
+                backgroundColor: 'rgba(13, 202, 240, 0.1)', 
+                data: [], 
+                fill: true,
+                tension: 0.1 // Straighter lines for integer counts
+            }]
+        },
+        options: {
+            ...chartOptions,
+            scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 12 } }
+        }
+    });
+
+    // 5. Particulate Matter Chart
+    const pmChart = new Chart(document.getElementById('pmChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [
+                { label: 'PM 1.0', borderColor: '#6c757d', data: [] },
+                { label: 'PM 2.5', borderColor: '#fd7e14', data: [] }, // Orange
+                { label: 'PM 10',  borderColor: '#20c997', data: [] }  // Teal
+            ]
+        },
+        options: chartOptions
+    });
+
+    function updateCharts(chart, newDataArray) {
+        newDataArray.forEach((val, index) => {
+            chart.data.datasets[index].data.push(val);
+            if (chart.data.datasets[index].data.length > MAX_DATA_POINTS) {
+                chart.data.datasets[index].data.shift();
+            }
+        });
+        chart.update('none');
+    }
+
+    function updateData() {
+        fetch('/api/latest-sensors/')
+            .then(res => res.json())
+            .then(data => {
+                // --- Numeric Updates ---
+                // Atmosphere
+                document.getElementById('temp').innerText = data.tempC.toFixed(1);
+                document.getElementById('hum').innerText = data.humRH.toFixed(0);
+                document.getElementById('pres').innerText = data.preshPa.toFixed(0);
+                
+                // Air Quality
+                document.getElementById('aqi').innerText = data.aqi;
+                document.getElementById('co2').innerText = data.eco2;
+                document.getElementById('tvoc').innerText = data.tvoc;
+                
+                // Position
+                document.getElementById('lat').innerText = data.lat.toFixed(6);
+                document.getElementById('lon').innerText = data.lon.toFixed(6);
+                document.getElementById('alt').innerText = data.alt.toFixed(1);
+
+                // Acceleration Text
+                // document.getElementById('accX').innerText = data.acc[0].toFixed(0);
+                // document.getElementById('accY').innerText = data.acc[1].toFixed(0);
+                // document.getElementById('accZ').innerText = data.acc[2].toFixed(0);
+
+                // Orientation Text
+                document.getElementById('angX').innerText = data.ang[0].toFixed(0);
+                document.getElementById('angY').innerText = data.ang[1].toFixed(0);
+                document.getElementById('angZ').innerText = data.ang[2].toFixed(0);
+                
+                // Noise Text
+                const realNoise = data.noise || 0; 
+                document.getElementById('db-level').innerText = realNoise.toFixed(1);
+
+                // Particulate Matter
+                document.getElementById('pm1').innerText = data.pm1;
+                document.getElementById('pm25').innerText = data.pm25;
+                document.getElementById('pm10').innerText = data.pm10;
+
+                // --- Chart Updates ---
+                updateCharts(accelChart, [data.acc[0], data.acc[1], data.acc[2]]);
+                updateCharts(gyroChart, [data.ang[0], data.ang[1], data.ang[2]]);
+                updateCharts(noiseChart, [realNoise]);
+                updateCharts(satsChart, [data.sats]);
+                updateCharts(pmChart, [data.pm1, data.pm25, data.pm10]);
+
+                // --- Styling Logic ---
+                // AQI Coloring
+                const label = document.getElementById('aqi-label');
+                const badge = document.getElementById('aqi-badge');
+                const states = {
+                    1: ["Excellent", "text-success", "bg-success-subtle"],
+                    2: ["Fair", "text-info", "bg-info-subtle"],
+                    3: ["Moderate", "text-warning", "bg-warning-subtle"],
+                    4: ["Poor", "text-danger", "bg-danger-subtle"],
+                    5: ["Very Poor", "text-dark", "bg-danger"]
+                };
+                
+                // Default fallback
+                const [text, textColor, badgeBg] = states[data.aqi] || ["Unknown", "text-muted", "bg-light"];
+                
+                label.innerText = text;
+                label.className = "fw-bold " + textColor;
+                // Preserve base badge classes and just swap the background color class
+                badge.className = `badge rounded-pill border px-3 py-2 ${badgeBg} ${textColor}`;
+            })
+            .catch(err => console.error("Error fetching sensor data:", err));
+    }
+
+    // Start polling every second
+    setInterval(updateData, 1000);
+</script>
+{% endblock %}

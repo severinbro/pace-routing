@@ -1,0 +1,13 @@
+django
+psycopg2-binary
+redis
+pynmea2
+pyserial
+piicodev  # For piicoDev modules
+django-environ
+sounddevice
+numpy
+sparkfun-ublox-gps
+smbus2
+gunicorn==21.2.0
+whitenoise==6.6.0
