@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="text-center mt-4">
+    <h2 class="fw-bold"><i class="bi bi-shield-lock-fill"></i> Admin Sign In</h2>
+    <p class="text-muted">Restricted access &mdash; Map, Dashboard and Data views.</p>
+</div>
+
+<div class="col-lg-5 mx-auto mt-5">
+    <div class="card p-4 shadow-sm border-0 rounded-4">
+        {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+            Invalid username or password. Please try again.
+        </div>
+        {% endif %}
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+
+            <div class="mb-3">
+                <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                {{ form.username }}
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                {{ form.password }}
+            </div>
+
+            <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg py-3 rounded-pill shadow">
+                    <i class="bi bi-box-arrow-in-right"></i> Sign In
+                </button>
+                <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Back to Surveys</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Bootstrap-ify Django's default auth form widgets
+    document.querySelectorAll('#id_username, #id_password').forEach(function (el) {
+        el.classList.add('form-control');
+    });
+</script>
+{% endblock %}

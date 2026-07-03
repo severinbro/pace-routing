@@ -1,21 +1,30 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
+from django.contrib.admin.views.decorators import staff_member_required
 import redis, json
 
 # Connect to Redis
 r = redis.Redis(host='redis', port=6379, db=0)
 
-# --- TAB 1: MAP ---
+# --- ADMIN-ONLY: MAP ---
+@staff_member_required(login_url='admin_login')
 def map_tab(request):
     """Renders the offline OSM map."""
     return render(request, 'data_cube/map.html')
 
-# --- TAB 2: MEASUREMENT DASHBOARD ---
+# --- ADMIN-ONLY: MEASUREMENT DASHBOARD ---
+@staff_member_required(login_url='admin_login')
 def dashboard_tab(request):
     """Renders the live sensor telemetry grid."""
     return render(request, 'data_cube/dashboard.html')
 
-# --- TAB 3: SURVEY DASHBOARD (LOBBY) ---
+# --- ADMIN-ONLY: LANDING PAGE AFTER SIGN IN ---
+@staff_member_required(login_url='admin_login')
+def admin_home(request):
+    """Renders the admin landing page with links to Dashboard, Map and Data."""
+    return render(request, 'data_cube/admin_home.html')
+
+# --- TAB: SURVEY DASHBOARD (LOBBY) ---
 def surveys_tab(request):
     """Renders the landing page for the two survey types."""
     return render(request, 'data_cube/surveys_lobby.html')
