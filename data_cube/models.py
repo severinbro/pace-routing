@@ -1,20 +1,30 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.contrib.auth.models import User
 
 
 ## ----- Sensor Tables -----
 
-# 1. GNSS Data Table (SAM-Q10M)
-class GNSSMeasurement(models.Model):
+# 1a. GNSS Data Table — Phone (sourced from the admin smartphone's browser)
+class GNSSPhoneMeasurement(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     latitude = models.DecimalField(max_digits=12, decimal_places=9)
     longitude = models.DecimalField(max_digits=12, decimal_places=9)
     altitude = models.FloatField(null=True)
     satellites = models.IntegerField(default=0)
+    accuracy = models.FloatField(default=0.0, help_text="Position accuracy in meters (from phone GPS)")
     
     @property
     def date_display(self):
         return self.timestamp.strftime('%d-%m-%Y')
+
+# 1b. GNSS Data Table — Sensor (SAM-M10Q via I2C)
+class GNSSSensorMeasurement(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    latitude = models.DecimalField(max_digits=12, decimal_places=9)
+    longitude = models.DecimalField(max_digits=12, decimal_places=9)
+    altitude = models.FloatField(null=True)
+    satellites = models.IntegerField(default=0)
 
 # 2. Atmospheric Data Table (BME280)
 class AtmosphericMeasurement(models.Model):
@@ -55,40 +65,27 @@ class NoiseMeasurement(models.Model):
 
 ## ----- Survey Tables -----
 
-# 1. Environment Survey Form (Likert-Scales)
+# 1. Environment Survey Form (7-point Likert-Scales, 3 phases)
 class EnvironmentSurvey(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     
-    # Questions 1-10
-    q1 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q2 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q3 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q4 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q5 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q6 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q7 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q8 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q9 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    q10 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    # Phase 1: Environmental features (7 questions)
+    q1 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Noise
+    q2 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Air Quality
+    q3 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Air Temperature
+    q4 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Aesthetics
+    q5 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Diversity
+    q6 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Urban Design
+    q7 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Accessibility
+
+    # Phase 2: Personal perception (3 questions)
+    q8 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Safety
+    q9 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])   # Enjoyment
+    q10 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])  # Stress
+
+    # Phase 3: Overall comfort (1 question)
+    q11 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])  # Comfort
 
     # Foreign keys to link a survey to the exact sensor state at that moment
-    gnss_snapshot = models.OneToOneField(GNSSMeasurement, on_delete=models.CASCADE, null=True)
-
-# 2. Relative Importance Survey Form (AHP, Pairwise Comparison)
-class RelativeImportanceSurvey(models.Model):
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
-    # Questions (Continuous Slider: 0.0 (Feature A) to 1.0 (Feature B). 0.5 is Neutral)
-    q1 = models.FloatField(default=0.5)
-    q2 = models.FloatField(default=0.5)
-    q3 = models.FloatField(default=0.5)
-    q4 = models.FloatField(default=0.5)
-    q5 = models.FloatField(default=0.5)
-    q6 = models.FloatField(default=0.5)
-    q7 = models.FloatField(default=0.5)
-    q8 = models.FloatField(default=0.5)
-    q9 = models.FloatField(default=0.5)
-    q10 = models.FloatField(default=0.5)
-
-    # Foreign keys to link a survey to the exact sensor state at that moment
-    gnss_snapshot = models.OneToOneField(GNSSMeasurement, on_delete=models.CASCADE, null=True)
+    gnss_snapshot = models.OneToOneField(GNSSPhoneMeasurement, on_delete=models.CASCADE, null=True)

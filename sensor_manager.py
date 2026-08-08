@@ -23,31 +23,43 @@ except Exception as e:
     print(f"Redis Connection Error: {e}")
     sys.exit(1)
 
-# 2. Init Bus 1 for PiicoDev
+# 2. Init Bus 1 for PiicoDev & SAM-M10Q GNSS (all on 3.3V)
 try:
     # The PiicoDev library defaults to Bus 1 internally
     atmo = PiicoDev_BME280()
     air = PiicoDev_ENS160()
     motion = PiicoDev_LIS3DH()
     motion.range = 2 
-    print("I2C Bus 1 (PiicoDev Sensors) Initialized.")
+    print("I2C Bus 1 (PiicoDev Sensors & GNSS Sensor) Initialized.")
 except Exception as e:
     print(f"I2C Bus 1 Error: {e}")
     
-# 3. Init Bus 2 for GNSS & PMSA
+# 3. Init Bus 2 for PMSA (5V, only the particulate matter sensor)
+PMSA_ADDR = 0x12
 GPS_ADDR = 0x42
 BYTES_AVAIL_REG = 0xFD
 DATA_STREAM_REG = 0xFF
-PMSA_ADDR = 0x12
 
 try:
     heavy_bus = SMBus(2) 
-    print("I2C Bus 2 (GNSS & PMSA) Initialized.")
+    print("I2C Bus 2 (PMSA) Initialized.")
 except Exception as e:
     print(f"I2C Bus 2 Error: {e}")
 
+# Bus 1 is used for the SAM-M10Q GNSS sensor (now on the 3.3V array)
+try:
+    gnss_bus = SMBus(1)
+    print("I2C Bus 1 (SAM-M10Q GNSS) Initialized.")
+except Exception as e:
+    print(f"I2C Bus 1 (GNSS) Error: {e}")
+
 # --- Global variables ---
-gps_data = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0 }
+# Two GNSS sources:
+#   1. Phone GNSS — pushed by the admin smartphone's browser to Redis ('gnss_phone')
+#   2. Sensor GNSS — read directly from the SAM-M10Q over I2C Bus 2
+gps_phone  = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0, "accuracy": 0.0 }
+gps_sensor = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0 }
+GNSS_STALE_SECONDS = 30  # If no phone fix in 30s, consider phone GNSS lost
 
 # --- Helper Functions ---
 def get_pm_data():
@@ -75,34 +87,60 @@ def get_noise_db(duration=0.5, fs=44100):
     except Exception:
         return 0.0
 
-def update_gps_data():
-    global gps_data
+def update_gps_phone():
+    """Reads the latest GNSS fix pushed by the admin smartphone from Redis."""
+    global gps_phone
+    try:
+        raw = r.get('gnss_phone')
+        if not raw:
+            return
+
+        fix = json.loads(raw)
+        received_at = fix.get('received_at', 0)
+        age = time.time() - received_at
+
+        if age > GNSS_STALE_SECONDS:
+            print(f"Phone GNSS fix is stale ({age:.0f}s old). Keeping last known position.")
+            return
+
+        gps_phone["lat"] = fix.get('lat', gps_phone["lat"])
+        gps_phone["lon"] = fix.get('lon', gps_phone["lon"])
+        gps_phone["alt"] = fix.get('alt', gps_phone["alt"])
+        gps_phone["accuracy"] = fix.get('accuracy', 0.0)
+        gps_phone["sats"] = fix.get('sats', 0)
+
+        print(f"Phone GNSS  -> Lat {gps_phone['lat']:.5f}, Lon {gps_phone['lon']:.5f}, "
+              f"Alt {gps_phone['alt']}m, Acc ±{gps_phone['accuracy']:.1f}m")
+
+    except Exception as e:
+        print(f"GPS read error (Redis/phone): {e}")
+
+def update_gps_sensor():
+    """Reads GNSS data directly from the SAM-M10Q sensor over I2C Bus 2."""
+    global gps_sensor
     buffer = ""
     try:
         # 1. Check how many bytes are waiting in the SAM-M10Q buffer
-        waiting_bytes_list = heavy_bus.read_i2c_block_data(GPS_ADDR, BYTES_AVAIL_REG, 2)
+        waiting_bytes_list = gnss_bus.read_i2c_block_data(GPS_ADDR, BYTES_AVAIL_REG, 2)
         num_bytes = (waiting_bytes_list[0] << 8) | waiting_bytes_list[1]
-        
+
         # Ignore hardware glitch readings
         if num_bytes == 0 or num_bytes == 65535 or num_bytes > 1024:
             return
-            
+
         time.sleep(0.01)
 
-        print(f"Found {num_bytes} bytes waiting in buffer...")
-        
         # 2. Read the bytes in chunks
         while num_bytes > 0:
             chunk_size = min(num_bytes, 16)
-            data = heavy_bus.read_i2c_block_data(GPS_ADDR, DATA_STREAM_REG, chunk_size)
+            data = gnss_bus.read_i2c_block_data(GPS_ADDR, DATA_STREAM_REG, chunk_size)
             for byte in data:
-                if byte == 0xFF: 
+                if byte == 0xFF:
                     continue
                 buffer += chr(byte)
             num_bytes -= chunk_size
-
             time.sleep(0.02)
-            
+
         # 3. Parse the NMEA sentences
         if '$GNGGA' in buffer or '$GPGGA' in buffer:
             lines = buffer.split('\n')
@@ -123,22 +161,21 @@ def update_gps_data():
                             lon = lon_deg + (lon_min / 60)
                             if parts[5] == 'W': lon = -lon
 
-                            gps_data["lat"] = lat
-                            gps_data["lon"] = lon
-                            gps_data["alt"] = float(parts[9])
-                            gps_data["sats"] = int(parts[7])
+                            gps_sensor["lat"] = lat
+                            gps_sensor["lon"] = lon
+                            gps_sensor["alt"] = float(parts[9])
+                            gps_sensor["sats"] = int(parts[7])
 
-                            print(f"SUCCESS -> Lat {lat:.5f}, Lon {lon:.5f}, Alt {gps_data['alt']}m, Sats {gps_data['sats']}")
+                            print(f"Sensor GNSS -> Lat {lat:.5f}, Lon {lon:.5f}, "
+                                  f"Alt {gps_sensor['alt']}m, Sats {gps_sensor['sats']}")
                         except ValueError:
-                            print(f"Parsing error on line: {line}")
-                            continue
+                            pass
                     else:
-                        print(f"No fix yet. Satellites visible: {parts[7] if len(parts) > 7 else '0'}")
                         visible_sats = int(parts[7]) if len(parts) > 7 and parts[7].isdigit() else 0
-                        gps_data["sats"] = visible_sats
+                        gps_sensor["sats"] = visible_sats
 
     except Exception as e:
-        print(f"GPS read error: {e}")
+        print(f"GPS read error (I2C/sensor): {e}")
 
 # --- Main Loop ---
 print("ElderPace Sensor Worker Running...")
@@ -147,8 +184,9 @@ loop_count = 0
 
 while True:
     try:
-        # 1. Update GPS State
-        update_gps_data()
+        # 1. Update GNSS State (both sources)
+        update_gps_phone()
+        update_gps_sensor()
         
         # 2. Collect Sensor Data
         tempC, presPa, humRH = atmo.values()
@@ -171,10 +209,18 @@ while True:
         
         # 3. Create Snapshot
         data = {
-            "lat": gps_data["lat"],
-            "lon": gps_data["lon"],
-            "alt": gps_data["alt"],
-            "sats": gps_data["sats"],
+            # Phone GNSS
+            "lat": gps_phone["lat"],
+            "lon": gps_phone["lon"],
+            "alt": gps_phone["alt"],
+            "sats": gps_phone["sats"],
+            "accuracy": gps_phone["accuracy"],
+            # Sensor GNSS (SAM-M10Q)
+            "sensor_lat": gps_sensor["lat"],
+            "sensor_lon": gps_sensor["lon"],
+            "sensor_alt": gps_sensor["alt"],
+            "sensor_sats": gps_sensor["sats"],
+            # Other sensors
             "tempC": round(tempC, 2),
             "preshPa": round(preshPa, 2),
             "humRH": round(humRH, 2),
@@ -195,11 +241,14 @@ while True:
         # Overwrites the key with the newest data every second (for live dashboards)
         r.set('sensor_measurements', payload)
         
-        # Only push to the database queue every 10 loops (10 seconds)
+        # Only push to the database queue every 5 loops (5 seconds)
         if loop_count % 5 == 0:
             r.rpush('sensor_db_queue', payload)
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{timestamp}] GPS: {gps_data['lat']:.5f}, {gps_data['lon']:.5f}, Sats: {gps_data['sats']} | Temp: {tempC:.1f}°C | Humidity: {humRH:.1f}% | AQI: {aqi_val} | eCO2: {eco2_val}ppm | TVOC: {tvoc_val}ppb | PM2.5: {pm25}µg/m³ | Noise: {noise_db}dB")
+            print(f"[{timestamp}] Phone: {gps_phone['lat']:.5f}, {gps_phone['lon']:.5f}, Acc ±{gps_phone['accuracy']:.1f}m | "
+                  f"Sensor: {gps_sensor['lat']:.5f}, {gps_sensor['lon']:.5f}, Sats {gps_sensor['sats']} | "
+                  f"Temp: {tempC:.1f}°C | Humidity: {humRH:.1f}% | AQI: {aqi_val} | eCO2: {eco2_val}ppm | "
+                  f"TVOC: {tvoc_val}ppb | PM2.5: {pm25}µg/m³ | Noise: {noise_db}dB")
         else:
             print("...")
             

@@ -79,8 +79,8 @@ services:
       - redis
       - web
     devices:
-      - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Bus
-      - "/dev/i2c-2:/dev/i2c-2"      # PMSA & GNSS Bus
+      - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Sensors & SAM-M10Q GNSS (3.3V)
+      - "/dev/i2c-2:/dev/i2c-2"      # PMSA Particulate Matter (5V)
       - "/dev/snd:/dev/snd"          # Gives the container access to the USB mic
     privileged: true
     networks:
@@ -120,15 +120,17 @@ services:
     networks:
       - pace_net
 
-  # 8. NGINX: Public Facing Proxy for Participants
+  # 8. NGINX: Public Facing Proxy for Participants (HTTPS for Geolocation API)
   nginx:
     image: nginx:alpine
     container_name: pace_nginx
     restart: unless-stopped
     ports:
-      - "80:80"  # Standard web traffic port
+      - "80:80"    # Redirects to HTTPS
+      - "443:443"  # HTTPS — required for browser Geolocation API
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - web
     networks:

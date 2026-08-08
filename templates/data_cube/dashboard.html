@@ -8,69 +8,111 @@
     <div class="row g-3 mb-3">
         
         <div class="col-md-4">
-            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
-                <h5 class="text-primary mb-3"><i class="bi bi-thermometer-half"></i> Atmosphere</h5>
-                <div class="d-flex flex-column gap-2">
-                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                        <span class="text-muted">Temperature</span>
-                        <span class="fw-bold fs-5"><span id="temp">--</span> °C</span>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-thermometer-half"></i></div>
+                    Atmosphere
+                </div>
+                <div class="d-flex flex-column gap-1">
+                    <div class="pace-data-row">
+                        <span class="label">Temperature</span>
+                        <span class="value"><span id="temp">--</span> °C</span>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                        <span class="text-muted">Humidity</span>
-                        <span class="fw-bold fs-5"><span id="hum">--</span> %</span>
+                    <div class="pace-data-row">
+                        <span class="label">Humidity</span>
+                        <span class="value"><span id="hum">--</span> %</span>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center pt-2">
-                        <span class="text-muted">Pressure</span>
-                        <span class="fw-bold fs-5"><span id="pres">----</span> hPa</span>
+                    <div class="pace-data-row">
+                        <span class="label">Pressure</span>
+                        <span class="value"><span id="pres">----</span> hPa</span>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="col-md-4">
-            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
-                <h5 class="text-success mb-3"><i class="bi bi-wind"></i> Air Quality</h5>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-wind"></i></div>
+                    Air Quality
+                </div>
                 <div class="text-center mb-3">
-                    <span class="badge rounded-pill bg-light text-dark border px-3 py-2" id="aqi-badge">
+                    <span class="pace-badge bg-white" id="aqi-badge">
                         Status: <span id="aqi-label">--</span>
                     </span>
                 </div>
-                <div class="d-flex flex-column gap-2">
-                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                        <span class="text-muted">AQI Index</span>
-                        <span class="fw-bold fs-5" id="aqi">--</span>
+                <div class="d-flex flex-column gap-1">
+                    <div class="pace-data-row">
+                        <span class="label">AQI Index</span>
+                        <span class="value" id="aqi">--</span>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                        <span class="text-muted">CO₂</span>
-                        <span class="fw-bold fs-5"><span id="co2">--</span> ppm</span>
+                    <div class="pace-data-row">
+                        <span class="label">CO₂</span>
+                        <span class="value"><span id="co2">--</span> ppm</span>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center pt-2">
-                        <span class="text-muted">TVOC</span>
-                        <span class="fw-bold fs-5"><span id="tvoc">--</span> ppb</span>
+                    <div class="pace-data-row">
+                        <span class="label">TVOC</span>
+                        <span class="value"><span id="tvoc">--</span> ppb</span>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="col-md-4">
-            <div class="card h-100 p-3 shadow-sm border-0 rounded-4">
-                <h5 class="text-info mb-3"><i class="bi bi-geo-alt-fill"></i> Position</h5>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="text-muted">Latitude</span>
-                    <span class="font-monospace fw-bold" id="lat">--</span>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-phone"></i></div>
+                    GNSS Phone
                 </div>
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="text-muted">Longitude</span>
-                    <span class="font-monospace fw-bold" id="lon">--</span>
+                <div class="pace-data-row">
+                    <span class="label">Latitude</span>
+                    <span class="value font-monospace" id="lat">--</span>
                 </div>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="text-muted">Altitude</span>
-                    <span class="font-monospace fw-bold"><span id="alt">--</span> m</span>
+                <div class="pace-data-row">
+                    <span class="label">Longitude</span>
+                    <span class="value font-monospace" id="lon">--</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Altitude</span>
+                    <span class="value font-monospace"><span id="alt">--</span> m</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Accuracy</span>
+                    <span class="value font-monospace">±<span id="acc">--</span> m</span>
                 </div>
                 <div style="height: 100px;">
                     <canvas id="satsChart"></canvas>
                 </div>
-                <small class="text-center text-muted mt-1">Satellites in View</small>
+                <small class="text-center text-muted mt-1 d-block">Phone Accuracy (m)</small>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-lavender"><i class="bi bi-broadcast-pin"></i></div>
+                    GNSS Sensor
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Latitude</span>
+                    <span class="value font-monospace" id="sensor_lat">--</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Longitude</span>
+                    <span class="value font-monospace" id="sensor_lon">--</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Altitude</span>
+                    <span class="value font-monospace"><span id="sensor_alt">--</span> m</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Satellites</span>
+                    <span class="value font-monospace" id="sensor_sats">--</span>
+                </div>
+                <div style="height: 100px;">
+                    <canvas id="sensorSatsChart"></canvas>
+                </div>
+                <small class="text-center text-muted mt-1 d-block">Sensor Satellites</small>
             </div>
         </div>
     </div>
@@ -78,10 +120,13 @@
     <div class="row g-3 mb-3">
         
         <div class="col-md-12">
-            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
-                <h5 class="text-warning mb-4"><i class="bi bi-activity"></i> Motion & Orientation</h5>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-lavender"><i class="bi bi-activity"></i></div>
+                    Motion &amp; Orientation
+                </div>
                 <div class="row">
-                    <div class="col-md-6 border-end">
+                    <div class="col-md-6 border-end border-3">
                         <h6 class="text-center text-muted small text-uppercase">Acceleration (m/s²)</h6>
                         <div style="height: 200px;"><canvas id="accelChart"></canvas></div>
                     </div>
@@ -91,9 +136,9 @@
                     </div>
                 </div>
                 <div class="row text-center mt-3 g-2">
-                    <div class="col-4 border-end"><small class="text-muted d-block">Pitch (X)</small><span class="fw-bold" id="angX">--</span>°</div>
-                    <div class="col-4 border-end"><small class="text-muted d-block">Roll (Y)</small><span class="fw-bold" id="angY">--</span>°</div>
-                    <div class="col-4"><small class="text-muted d-block">Yaw (Z)</small><span class="fw-bold" id="angZ">--</span>°</div>
+                    <div class="col-4 border-end border-3"><small class="text-muted d-block">Pitch (X)</small><span class="fw-bold fs-5" id="angX">--</span>°</div>
+                    <div class="col-4 border-end border-3"><small class="text-muted d-block">Roll (Y)</small><span class="fw-bold fs-5" id="angY">--</span>°</div>
+                    <div class="col-4"><small class="text-muted d-block">Yaw (Z)</small><span class="fw-bold fs-5" id="angZ">--</span>°</div>
                 </div>
             </div>
         </div>
@@ -102,11 +147,14 @@
     <div class="row g-3">
 
         <div class="col-md-6">
-            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
-                <h5 class="text-danger mb-3"><i class="bi bi-soundwave"></i> Noise Levels (dB)</h5>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-soundwave"></i></div>
+                    Noise Levels (dB)
+                </div>
                 <div class="d-flex justify-content-center align-items-end mb-3">
-                    <span class="display-4 fw-bold me-2" id="db-level">--</span>
-                    <span class="text-muted pb-2">dB</span>
+                    <span class="pace-big-num me-2" id="db-level">--</span>
+                    <span class="text-muted pb-2 fs-4">dB</span>
                 </div>
                 <div style="height: 150px;">
                     <canvas id="noiseChart"></canvas>
@@ -115,20 +163,23 @@
         </div>
 
         <div class="col-md-6">
-            <div class="card h-100 p-4 shadow-sm border-0 rounded-4">
-                <h5 class="text-secondary mb-3"><i class="bi bi-mask"></i> Particulates (µg/m³)</h5>
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-navy"><i class="bi bi-mask"></i></div>
+                    Particulates (µg/m³)
+                </div>
                 <div class="d-flex justify-content-around text-center mb-3">
                     <div>
                         <small class="text-muted d-block">PM 1.0</small>
-                        <span class="fw-bold fs-5" id="pm1">--</span>
+                        <span class="fw-bold fs-4" id="pm1">--</span>
                     </div>
-                    <div class="border-start border-end px-3">
+                    <div class="border-start border-end border-3 px-3">
                         <small class="text-muted d-block">PM 2.5</small>
-                        <span class="fw-bold fs-5" id="pm25">--</span>
+                        <span class="fw-bold fs-4" id="pm25">--</span>
                     </div>
                     <div>
                         <small class="text-muted d-block">PM 10</small>
-                        <span class="fw-bold fs-5" id="pm10">--</span>
+                        <span class="fw-bold fs-4" id="pm10">--</span>
                     </div>
                 </div>
                 <div style="height: 150px;">
@@ -157,9 +208,9 @@
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
             datasets: [
-                { label: 'Acc X', borderColor: '#ff6384', data: [] },
-                { label: 'Acc Y', borderColor: '#36a2eb', data: [] },
-                { label: 'Acc Z', borderColor: '#cc65fe', data: [] }
+                { label: 'Acc X', borderColor: '#FF6B6B', data: [] },
+                { label: 'Acc Y', borderColor: '#4ECDC4', data: [] },
+                { label: 'Acc Z', borderColor: '#B19CD9', data: [] }
             ]
         },
         options: chartOptions
@@ -171,9 +222,9 @@
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
             datasets: [
-                { label: 'Pitch', borderColor: '#ffce56', data: [] },
-                { label: 'Roll', borderColor: '#4bc0c0', data: [] },
-                { label: 'Yaw', borderColor: '#9966ff', data: [] }
+                { label: 'Pitch', borderColor: '#FFD93D', data: [] },
+                { label: 'Roll', borderColor: '#6EC6FF', data: [] },
+                { label: 'Yaw', borderColor: '#FF6B6B', data: [] }
             ]
         },
         options: chartOptions
@@ -184,23 +235,43 @@
         type: 'line',
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
-            datasets: [{ label: 'Decibels (dB)', borderColor: '#dc3545', backgroundColor: 'rgba(220, 53, 69, 0.1)', data: [], fill: true }]
+            datasets: [{ label: 'Decibels (dB)', borderColor: '#FF6B6B', backgroundColor: 'rgba(255, 107, 107, 0.1)', data: [], fill: true }]
         },
         options: chartOptions
     });
 
-    // 4. Satellites Chart
+    // 4. Phone Accuracy Chart
     const satsChart = new Chart(document.getElementById('satsChart'), {
         type: 'line',
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
             datasets: [{ 
-                label: 'Satellites', 
-                borderColor: '#0dcaf0', // Bootstrap Info Color
-                backgroundColor: 'rgba(13, 202, 240, 0.1)', 
+                label: 'Accuracy (m)', 
+                borderColor: '#6EC6FF',
+                backgroundColor: 'rgba(110, 198, 255, 0.1)', 
                 data: [], 
                 fill: true,
-                tension: 0.1 // Straighter lines for integer counts
+                tension: 0.1
+            }]
+        },
+        options: {
+            ...chartOptions,
+            scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 50, reverse: true } }
+        }
+    });
+
+    // 4b. Sensor Satellites Chart
+    const sensorSatsChart = new Chart(document.getElementById('sensorSatsChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [{ 
+                label: 'Satellites', 
+                borderColor: '#B19CD9',
+                backgroundColor: 'rgba(177, 156, 217, 0.1)', 
+                data: [], 
+                fill: true,
+                tension: 0.1
             }]
         },
         options: {
@@ -215,9 +286,9 @@
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
             datasets: [
-                { label: 'PM 1.0', borderColor: '#6c757d', data: [] },
-                { label: 'PM 2.5', borderColor: '#fd7e14', data: [] }, // Orange
-                { label: 'PM 10',  borderColor: '#20c997', data: [] }  // Teal
+                { label: 'PM 1.0', borderColor: '#B19CD9', data: [] },
+                { label: 'PM 2.5', borderColor: '#FF6B6B', data: [] },
+                { label: 'PM 10',  borderColor: '#4ECDC4', data: [] }
             ]
         },
         options: chartOptions
@@ -248,10 +319,17 @@
                 document.getElementById('co2').innerText = data.eco2;
                 document.getElementById('tvoc').innerText = data.tvoc;
                 
-                // Position
+                // Position (Phone)
                 document.getElementById('lat').innerText = data.lat.toFixed(6);
                 document.getElementById('lon').innerText = data.lon.toFixed(6);
                 document.getElementById('alt').innerText = data.alt.toFixed(1);
+                document.getElementById('acc').innerText = (data.accuracy || 0).toFixed(1);
+
+                // Position (Sensor SAM-M10Q)
+                document.getElementById('sensor_lat').innerText = (data.sensor_lat || 0).toFixed(6);
+                document.getElementById('sensor_lon').innerText = (data.sensor_lon || 0).toFixed(6);
+                document.getElementById('sensor_alt').innerText = (data.sensor_alt || 0).toFixed(1);
+                document.getElementById('sensor_sats').innerText = data.sensor_sats || 0;
 
                 // Acceleration Text
                 // document.getElementById('accX').innerText = data.acc[0].toFixed(0);
@@ -276,28 +354,28 @@
                 updateCharts(accelChart, [data.acc[0], data.acc[1], data.acc[2]]);
                 updateCharts(gyroChart, [data.ang[0], data.ang[1], data.ang[2]]);
                 updateCharts(noiseChart, [realNoise]);
-                updateCharts(satsChart, [data.sats]);
+                updateCharts(satsChart, [data.accuracy || 0]);
+                updateCharts(sensorSatsChart, [data.sensor_sats || 0]);
                 updateCharts(pmChart, [data.pm1, data.pm25, data.pm10]);
 
                 // --- Styling Logic ---
-                // AQI Coloring
+                // AQI Coloring (flat palette)
                 const label = document.getElementById('aqi-label');
                 const badge = document.getElementById('aqi-badge');
                 const states = {
-                    1: ["Excellent", "text-success", "bg-success-subtle"],
-                    2: ["Fair", "text-info", "bg-info-subtle"],
-                    3: ["Moderate", "text-warning", "bg-warning-subtle"],
-                    4: ["Poor", "text-danger", "bg-danger-subtle"],
-                    5: ["Very Poor", "text-dark", "bg-danger"]
+                    1: ["Excellent", "#4ECDC4"],
+                    2: ["Fair",      "#6EC6FF"],
+                    3: ["Moderate",  "#FFD93D"],
+                    4: ["Poor",      "#FF6B6B"],
+                    5: ["Very Poor", "#2B2D6B"]
                 };
                 
-                // Default fallback
-                const [text, textColor, badgeBg] = states[data.aqi] || ["Unknown", "text-muted", "bg-light"];
+                const [text, bgColor] = states[data.aqi] || ["Unknown", "#8B8FA3"];
                 
                 label.innerText = text;
-                label.className = "fw-bold " + textColor;
-                // Preserve base badge classes and just swap the background color class
-                badge.className = `badge rounded-pill border px-3 py-2 ${badgeBg} ${textColor}`;
+                // Flat badge: solid background, white text, chunky border
+                badge.style.background = bgColor;
+                badge.style.color = (bgColor === '#FFD93D') ? '#2B2D6B' : '#fff';
             })
             .catch(err => console.error("Error fetching sensor data:", err));
     }

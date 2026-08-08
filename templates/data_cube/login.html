@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="text-center mt-4">
-    <h2 class="fw-bold"><i class="bi bi-shield-lock-fill"></i> Admin Sign In</h2>
-    <p class="text-muted">Restricted access &mdash; Map, Dashboard and Data views.</p>
+    <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3">
+        <i class="bi bi-shield-lock-fill"></i>
+    </div>
+    <h2 class="fw-bold">Sign In</h2>
+    <p class="text-muted">Admin and participant accounts sign in here.</p>
 </div>
 
-<div class="col-lg-5 mx-auto mt-5">
-    <div class="card p-4 shadow-sm border-0 rounded-4">
+<div class="col-lg-5 mx-auto mt-4">
+    <div class="pace-card p-4">
         {% if form.errors %}
         <div class="alert alert-danger" role="alert">
             Invalid username or password. Please try again.
@@ -27,9 +30,12 @@
             </div>
 
             <div class="d-grid gap-2 mt-4">
-                <button type="submit" class="btn btn-primary btn-lg py-3 rounded-pill shadow">
+                <button type="submit" class="btn btn-pace-primary btn-lg py-3">
                     <i class="bi bi-box-arrow-in-right"></i> Sign In
                 </button>
+                <a href="{% url 'sign_up' %}" class="btn btn-pace-mint btn-lg py-3">
+                    <i class="bi bi-person-plus-fill"></i> Sign Up
+                </a>
                 <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Back to Surveys</a>
             </div>
         </form>
