@@ -11,8 +11,6 @@ sparkfun-ublox-gps
 smbus2
 gunicorn==21.2.0
 whitenoise==6.6.0
-
-# Data export (GPKG)
 pandas
 geopandas
 shapely
