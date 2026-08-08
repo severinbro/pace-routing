@@ -29,7 +29,7 @@
             {% for feature in phase1_features %}
             <div class="pace-card mb-3 pace-card-hover">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">{{ forloop.counter }}. <span style="color: var(--pace-coral);">{{ feature.label }}</span></h5>
+                    <div class="pace-survey-question mb-3">{{ forloop.counter }}. <span class="accent">{{ feature.label }}</span></div>
                     <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
                         {% for val in "1234567"|make_list %}
                         <input type="radio" class="btn-check" name="q{{ feature.id }}" id="q{{ feature.id }}_{{ val }}" value="{{ val }}" required>
@@ -61,7 +61,7 @@
             {% for question in phase2_questions %}
             <div class="pace-card mb-3 pace-card-hover">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">{{ question.label }}</h5>
+                    <div class="pace-survey-question mb-3">{{ question.label }}</div>
                     <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
                         {% for val in "1234567"|make_list %}
                         <input type="radio" class="btn-check" name="q{{ question.id }}" id="q{{ question.id }}_{{ val }}" value="{{ val }}" required>
@@ -94,7 +94,7 @@
 
             <div class="pace-card mb-3 pace-card-hover">
                 <div class="card-body p-4">
-                    <h5 class="fw-bold mb-3">How comfortable do you feel right now?</h5>
+                    <div class="pace-survey-question mb-3">How comfortable do you feel right now?</div>
                     <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
                         {% for val in "1234567"|make_list %}
                         <input type="radio" class="btn-check" name="q11" id="q11_{{ val }}" value="{{ val }}" required>

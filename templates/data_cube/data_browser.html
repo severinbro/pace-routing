@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3">
+            <i class="bi bi-database-fill"></i>
+        </div>
+        <h2 class="fw-bold">Data Browser</h2>
+        <p class="text-muted">Browse all collected sensor and survey data.</p>
+    </div>
+
+    <!-- GPKG Export -->
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-download"></i></div>
+            Export
+        </div>
+        <p class="text-muted mb-3">
+            Joins the 6 sensor tables on their shared <code>id</code> column and uses
+            GNSS latitude/longitude as point geometry (GeoPackage for QGIS/ArcGIS).
+        </p>
+        <a href="{% url 'export_gpkg' %}" class="btn btn-pace-mint">
+            <i class="bi bi-file-earmark-zip-fill"></i> Export Sensor Data (GPKG)
+        </a>
+    </div>
+
+    <!-- Tabs -->
+    <div class="pace-tabs">
+        {% for table in tables %}
+        <button class="pace-tab {% if forloop.first %}active{% endif %}"
+                onclick="switchTab('{{ table.key }}', this)">
+            {{ table.label }}
+            <span class="badge bg-light text-dark ms-1">{{ table.rows|length }}</span>
+        </button>
+        {% endfor %}
+    </div>
+
+    <!-- Tables -->
+    {% for table in tables %}
+    <div id="table-{{ table.key }}" {% if not forloop.first %}style="display: none;"{% endif %}>
+        <div class="pace-table-wrap">
+            <table class="pace-data-table">
+                <thead>
+                    <tr>
+                        {% for col in table.columns %}
+                        <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table.rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ table.columns|length }}" class="text-center text-muted py-4">
+                            No data yet.
+                        </td>
+                    </tr>
+                    {% endempty %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mt-2">Showing latest 200 records.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    function switchTab(key, clickedBtn) {
+        // Hide all tables
+        document.querySelectorAll('[id^="table-"]').forEach(function(el) {
+            el.style.display = 'none';
+        });
+        // Show the selected table
+        document.getElementById('table-' + key).style.display = 'block';
+
+        // Deactivate all tabs, activate the clicked one
+        document.querySelectorAll('.pace-tab').forEach(function(el) {
+            el.classList.remove('active');
+        });
+        clickedBtn.classList.add('active');
+    }
+</script>
+{% endblock %}

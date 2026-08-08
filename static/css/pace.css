@@ -356,3 +356,93 @@ h1, h2, h3, h4, h5, h6 {
 /* ---- Utility ---- */
 .pace-rounded { border-radius: var(--pace-radius) !important; }
 .pace-rounded-lg { border-radius: var(--pace-radius-lg) !important; }
+
+/* ---- Survey Question Text (bigger than scale labels) ---- */
+.pace-survey-question {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--pace-ink);
+    margin-bottom: 16px;
+    line-height: 1.3;
+}
+.pace-survey-question .accent { color: var(--pace-coral); }
+@media (min-width: 768px) {
+    .pace-survey-question {
+        font-size: 1.75rem;
+        margin-bottom: 20px;
+    }
+}
+
+/* ---- Data Browser: Tabs ---- */
+.pace-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 20px;
+}
+.pace-tab {
+    background: var(--pace-card);
+    border: 3px solid var(--pace-border);
+    border-radius: var(--pace-radius-sm);
+    padding: 10px 18px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--pace-ink);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+.pace-tab:hover {
+    background: var(--pace-navy);
+    color: #fff;
+}
+.pace-tab.active {
+    background: var(--pace-coral);
+    color: #fff;
+}
+@media (min-width: 768px) {
+    .pace-tab { font-size: 1.2rem; padding: 12px 24px; }
+}
+
+/* ---- Data Browser: Table ---- */
+.pace-data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.9rem;
+}
+.pace-data-table thead th {
+    background: var(--pace-navy);
+    color: #fff;
+    font-weight: 700;
+    padding: 10px 8px;
+    text-align: left;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+}
+.pace-data-table thead th:first-child { border-radius: 10px 0 0 0; }
+.pace-data-table thead th:last-child  { border-radius: 0 10px 0 0; }
+.pace-data-table tbody td {
+    padding: 8px;
+    border-bottom: 2px dashed #E0E0E8;
+    white-space: nowrap;
+}
+.pace-data-table tbody tr:nth-child(even) td {
+    background: rgba(255, 217, 61, 0.08);
+}
+.pace-data-table tbody tr:hover td {
+    background: rgba(255, 107, 107, 0.12);
+}
+@media (min-width: 768px) {
+    .pace-data-table { font-size: 1rem; }
+    .pace-data-table thead th { padding: 14px 12px; }
+    .pace-data-table tbody td { padding: 12px; }
+}
+
+/* ---- Data Browser: Scrollable table wrapper ---- */
+.pace-table-wrap {
+    border: 3px solid var(--pace-border);
+    border-radius: var(--pace-radius);
+    overflow: auto;
+    max-height: 70vh;
+}

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.views import LoginView
 from django.contrib.auth import login
@@ -7,7 +7,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
-import redis, json, subprocess, logging
+import redis, json, subprocess, logging, os
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,99 @@ def map_tab(request):
 def dashboard_tab(request):
     """Renders the live sensor telemetry grid."""
     return render(request, 'data_cube/dashboard.html')
+
+# --- ADMIN-ONLY: DATA BROWSER ---
+@staff_member_required(login_url='admin_login')
+def data_browser(request):
+    """Renders a custom data browser page with tabbed CMS-style tables."""
+    from data_cube.models import (
+        GNSSMeasurement, AtmosphericMeasurement, AccelerometerMeasurement,
+        AirQualityMeasurement, ParticulateMeasurement, NoiseMeasurement,
+        EnvironmentSurvey,
+    )
+
+    tables = [
+        {
+            'key': 'gnss',
+            'label': 'GNSS',
+            'columns': ['ID', 'Timestamp', 'Latitude', 'Longitude', 'Altitude', 'Satellites', 'Accuracy'],
+            'rows': list(GNSSMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites', 'accuracy'
+            )),
+        },
+        {
+            'key': 'atmosphere',
+            'label': 'Atmosphere',
+            'columns': ['ID', 'Timestamp', 'Temperature (°C)', 'Humidity (%)', 'Pressure (hPa)'],
+            'rows': list(AtmosphericMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'temperature', 'humidity', 'pressure'
+            )),
+        },
+        {
+            'key': 'accelerometer',
+            'label': 'Accelerometer',
+            'columns': ['ID', 'Timestamp', 'Acc X', 'Acc Y', 'Acc Z', 'Angle X', 'Angle Y', 'Angle Z'],
+            'rows': list(AccelerometerMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ'
+            )),
+        },
+        {
+            'key': 'air_quality',
+            'label': 'Air Quality',
+            'columns': ['ID', 'Timestamp', 'AQI', 'TVOC (ppb)', 'eCO2 (ppm)'],
+            'rows': list(AirQualityMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'aqi', 'tvoc', 'eco2'
+            )),
+        },
+        {
+            'key': 'particulates',
+            'label': 'Particulates',
+            'columns': ['ID', 'Timestamp', 'PM1.0', 'PM2.5', 'PM10'],
+            'rows': list(ParticulateMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'pm1', 'pm25', 'pm10'
+            )),
+        },
+        {
+            'key': 'noise',
+            'label': 'Noise',
+            'columns': ['ID', 'Timestamp', 'Noise (dB)'],
+            'rows': list(NoiseMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'noise_db'
+            )),
+        },
+        {
+            'key': 'surveys',
+            'label': 'Surveys',
+            'columns': ['ID', 'Timestamp', 'User', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11', 'GNSS ID'],
+            'rows': list(EnvironmentSurvey.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'user__username',
+                'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7',
+                'q8', 'q9', 'q10', 'q11', 'gnss_snapshot_id'
+            )),
+        },
+    ]
+
+    return render(request, 'data_cube/data_browser.html', {'tables': tables})
+
+# --- ADMIN-ONLY: GPKG EXPORT ---
+@staff_member_required(login_url='admin_login')
+def export_gpkg(request):
+    """Joins the 6 sensor tables on id and streams the result as a .gpkg file."""
+    from data_cube.exports import write_sensor_gpkg, export_filename
+    path = write_sensor_gpkg()
+    try:
+        response = FileResponse(
+            open(path, 'rb'),
+            as_attachment=True,
+            filename=export_filename(),
+            content_type='application/geopackage+sqlite3',
+        )
+        response._resource_closers.append(lambda: os.remove(path))
+        return response
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
 
 # --- ADMIN-ONLY: LANDING PAGE AFTER SIGN IN ---
 @staff_member_required(login_url='admin_login')

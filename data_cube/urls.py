@@ -8,6 +8,8 @@ urlpatterns = [
     path('', views.surveys_tab, name='surveys_tab'),
     path('map/', views.map_tab, name='map_tab'),
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
+    path('data-browser/', views.data_browser, name='data_browser'),
+    path('export-gpkg/', views.export_gpkg, name='export_gpkg'),
 
     # --- AUTH & LANDING ---
     # Custom login view redirects admin -> admin_home, non-admin -> surveys_tab
