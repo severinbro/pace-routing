@@ -126,8 +126,8 @@ services:
     container_name: pace_nginx
     restart: unless-stopped
     ports:
-      - "80:80"    # Redirects to HTTPS
-      - "443:443"  # HTTPS — required for browser Geolocation API
+      - "8081:80"    # Redirects to HTTPS
+      - "8000:443"  # HTTPS — required for browser Geolocation API
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro

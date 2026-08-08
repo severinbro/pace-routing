@@ -15,6 +15,11 @@ from PiicoDev_Unified import sleep_ms
 # --- Initialization ---
 print("----- Initialization -----")
 
+PMSA_ADDR = 0x12
+GPS_ADDR = 0x42
+BYTES_AVAIL_REG = 0xFD
+DATA_STREAM_REG = 0xFF
+
 # 1. Setup Redis Connection
 try:
     r = redis.Redis(host='redis', port=6379, db=0)
@@ -33,30 +38,24 @@ try:
     print("I2C Bus 1 (PiicoDev Sensors & GNSS Sensor) Initialized.")
 except Exception as e:
     print(f"I2C Bus 1 Error: {e}")
+
+try:
+    gnss_bus = SMBus(1)
+    print("I2C Bus 1 (SAM-M10Q GNSS) Initialized.")
+except Exception as e:
+    print(f"I2C Bus 1 (GNSS) Error: {e}")
     
 # 3. Init Bus 2 for PMSA (5V, only the particulate matter sensor)
-PMSA_ADDR = 0x12
-GPS_ADDR = 0x42
-BYTES_AVAIL_REG = 0xFD
-DATA_STREAM_REG = 0xFF
-
 try:
     heavy_bus = SMBus(2) 
     print("I2C Bus 2 (PMSA) Initialized.")
 except Exception as e:
     print(f"I2C Bus 2 Error: {e}")
 
-# Bus 1 is used for the SAM-M10Q GNSS sensor (now on the 3.3V array)
-try:
-    gnss_bus = SMBus(1)
-    print("I2C Bus 1 (SAM-M10Q GNSS) Initialized.")
-except Exception as e:
-    print(f"I2C Bus 1 (GNSS) Error: {e}")
-
 # --- Global variables ---
 # Two GNSS sources:
 #   1. Phone GNSS — pushed by the admin smartphone's browser to Redis ('gnss_phone')
-#   2. Sensor GNSS — read directly from the SAM-M10Q over I2C Bus 2
+#   2. Sensor GNSS — read directly from the SAM-M10Q over I2C
 gps_phone  = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0, "accuracy": 0.0 }
 gps_sensor = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0 }
 GNSS_STALE_SECONDS = 30  # If no phone fix in 30s, consider phone GNSS lost
@@ -65,7 +64,6 @@ GNSS_STALE_SECONDS = 30  # If no phone fix in 30s, consider phone GNSS lost
 def get_pm_data():
     """Reads PM1.0, PM2.5, and PM10 from the PMSA003I."""
     try:
-        # FIX: Change 'bus' to 'heavy_bus'
         data = heavy_bus.read_i2c_block_data(PMSA_ADDR, 0x00, 32)
         
         pm1   = (data[4] << 8) | data[5]
@@ -178,7 +176,7 @@ def update_gps_sensor():
         print(f"GPS read error (I2C/sensor): {e}")
 
 # --- Main Loop ---
-print("ElderPace Sensor Worker Running...")
+print("Pace Sensor Worker Running...")
 
 loop_count = 0
 

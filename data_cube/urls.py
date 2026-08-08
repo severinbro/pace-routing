@@ -10,6 +10,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
     path('data-browser/', views.data_browser, name='data_browser'),
     path('export-gpkg/', views.export_gpkg, name='export_gpkg'),
+    path('export-survey-json/', views.export_survey_json, name='export_survey_json'),
 
     # --- AUTH & LANDING ---
     # Custom login view redirects admin -> admin_home, non-admin -> surveys_tab

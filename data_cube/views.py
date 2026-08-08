@@ -124,7 +124,7 @@ def data_browser(request):
 # --- ADMIN-ONLY: GPKG EXPORT ---
 @staff_member_required(login_url='admin_login')
 def export_gpkg(request):
-    """Joins the 6 sensor tables on id and streams the result as a .gpkg file."""
+    """Joins the 7 sensor tables on id and streams the result as a .gpkg file."""
     from data_cube.exports import write_sensor_gpkg, export_filename
     path = write_sensor_gpkg()
     try:
@@ -133,6 +133,26 @@ def export_gpkg(request):
             as_attachment=True,
             filename=export_filename(),
             content_type='application/geopackage+sqlite3',
+        )
+        response._resource_closers.append(lambda: os.remove(path))
+        return response
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
+
+# --- ADMIN-ONLY: SURVEY JSON EXPORT ---
+@staff_member_required(login_url='admin_login')
+def export_survey_json(request):
+    """Streams all survey responses as a .json file (one entry per survey)."""
+    from data_cube.exports import write_survey_json, survey_export_filename
+    path = write_survey_json()
+    try:
+        response = FileResponse(
+            open(path, 'rb'),
+            as_attachment=True,
+            filename=survey_export_filename(),
+            content_type='application/json',
         )
         response._resource_closers.append(lambda: os.remove(path))
         return response

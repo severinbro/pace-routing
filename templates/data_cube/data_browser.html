@@ -11,18 +11,21 @@
         <p class="text-muted">Browse all collected sensor and survey data.</p>
     </div>
 
-    <!-- GPKG Export -->
+    <!-- Exports -->
     <div class="pace-card p-4 mb-4">
         <div class="pace-section-title">
             <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-download"></i></div>
             Export
         </div>
         <p class="text-muted mb-3">
-            Joins the 6 sensor tables on their shared <code>id</code> column and uses
+            Joins the 7 sensor tables on their shared <code>id</code> column and uses
             GNSS latitude/longitude as point geometry (GeoPackage for QGIS/ArcGIS).
         </p>
         <a href="{% url 'export_gpkg' %}" class="btn btn-pace-mint">
             <i class="bi bi-file-earmark-zip-fill"></i> Export Sensor Data (GPKG)
+        </a>
+        <a href="{% url 'export_survey_json' %}" class="btn btn-pace-mint ms-2">
+            <i class="bi bi-file-earmark-text-fill"></i> Export Survey Data (JSON)
         </a>
     </div>
 
