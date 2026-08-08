@@ -2,45 +2,146 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="text-center mb-5">
-        <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3" style="width:72px;height:72px;font-size:2rem;">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3">
             <i class="bi bi-leaf-fill"></i>
         </div>
         <h2 class="fw-bold">Environmental Rating</h2>
-        <p class="text-muted">Rate the current path features on a scale of 1 (Poor) to 5 (Excellent).</p>
+        <p class="text-muted">Rate each feature on a scale of 1 to 7.</p>
     </div>
 
-    <form method="POST">
+    <!-- Progress indicator -->
+    <div class="d-flex justify-content-center gap-2 mb-4">
+        <span class="pace-badge" id="phase-dot-1" style="background: var(--pace-coral); color: #fff;">1</span>
+        <span class="pace-badge" id="phase-dot-2" style="background: #fff; color: var(--pace-muted);">2</span>
+        <span class="pace-badge" id="phase-dot-3" style="background: #fff; color: var(--pace-muted);">3</span>
+    </div>
+
+    <form method="POST" id="survey-form">
         {% csrf_token %}
-        
-        {% for i in "1234567890"|make_list %}
-        <div class="pace-card mb-4 pace-card-hover">
-            <div class="card-body p-4">
-                <h5 class="fw-bold mb-3">Feature {{ forloop.counter }}: <span style="color: var(--pace-coral);">[Feature Name]</span></h5>
-                
-                <div class="btn-group w-100" role="group" aria-label="Likert Scale">
-                    {% for val in "12345"|make_list %}
-                    <input type="radio" class="btn-check" name="q{{ forloop.parentloop.counter }}" id="q{{ forloop.parentloop.counter }}_{{ val }}" value="{{ val }}" required>
-                    <label class="btn btn-pace-outline py-3 fw-bold" for="q{{ forloop.parentloop.counter }}_{{ val }}">
-                        {{ val }}
-                    </label>
-                    {% endfor %}
-                </div>
-                
-                <div class="d-flex justify-content-between mt-2 text-muted small px-1">
-                    <span>Poor</span>
-                    <span>Excellent</span>
+
+        <!-- ===== PHASE 1: Environmental Features (q1-q7) ===== -->
+        <div id="phase-1">
+            <div class="text-center mb-3">
+                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 1 of 3 — Environmental Features</span>
+            </div>
+
+            {% for feature in phase1_features %}
+            <div class="pace-card mb-3 pace-card-hover">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3">{{ forloop.counter }}. <span style="color: var(--pace-coral);">{{ feature.label }}</span></h5>
+                    <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
+                        {% for val in "1234567"|make_list %}
+                        <input type="radio" class="btn-check" name="q{{ feature.id }}" id="q{{ feature.id }}_{{ val }}" value="{{ val }}" required>
+                        <label class="btn btn-pace-outline fw-bold" for="q{{ feature.id }}_{{ val }}">{{ val }}</label>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex justify-content-between mt-2 text-muted small px-1">
+                        <span>{{ feature.low }}</span>
+                        <span>{{ feature.high }}</span>
+                    </div>
                 </div>
             </div>
-        </div>
-        {% endfor %}
+            {% endfor %}
 
-        <div class="d-grid gap-2 mt-5 mb-5">
-            <button type="submit" class="btn btn-pace-primary btn-lg py-3">
-                <i class="bi bi-file-check-fill"></i> Save Environmental Survey
-            </button>
-            <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Cancel</a>
+            <div class="d-grid gap-2 mt-4 mb-5">
+                <button type="button" class="btn btn-pace-primary btn-lg py-3" onclick="goToPhase(2)">
+                    <i class="bi bi-arrow-right-circle-fill"></i> Continue
+                </button>
+                <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Start Over</a>
+            </div>
+        </div>
+
+        <!-- ===== PHASE 2: Personal Perception (q8-q10) ===== -->
+        <div id="phase-2" style="display: none;">
+            <div class="text-center mb-3">
+                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 2 of 3 — Personal Perception</span>
+            </div>
+
+            {% for question in phase2_questions %}
+            <div class="pace-card mb-3 pace-card-hover">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3">{{ question.label }}</h5>
+                    <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
+                        {% for val in "1234567"|make_list %}
+                        <input type="radio" class="btn-check" name="q{{ question.id }}" id="q{{ question.id }}_{{ val }}" value="{{ val }}" required>
+                        <label class="btn btn-pace-outline fw-bold" for="q{{ question.id }}_{{ val }}">{{ val }}</label>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex justify-content-between mt-2 text-muted small px-1">
+                        <span>{{ question.low }}</span>
+                        <span>{{ question.high }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+
+            <div class="d-grid gap-2 mt-4 mb-5">
+                <button type="button" class="btn btn-pace-primary btn-lg py-3" onclick="goToPhase(3)">
+                    <i class="bi bi-arrow-right-circle-fill"></i> Continue
+                </button>
+                <button type="button" class="btn btn-pace-outline" onclick="goToPhase(1)">
+                    <i class="bi bi-arrow-left-circle"></i> Back
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== PHASE 3: Overall Comfort (q11) ===== -->
+        <div id="phase-3" style="display: none;">
+            <div class="text-center mb-3">
+                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 3 of 3 — Overall Comfort</span>
+            </div>
+
+            <div class="pace-card mb-3 pace-card-hover">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3">How comfortable do you feel right now?</h5>
+                    <div class="btn-group pace-likert w-100" role="group" aria-label="Likert Scale">
+                        {% for val in "1234567"|make_list %}
+                        <input type="radio" class="btn-check" name="q11" id="q11_{{ val }}" value="{{ val }}" required>
+                        <label class="btn btn-pace-outline fw-bold" for="q11_{{ val }}">{{ val }}</label>
+                        {% endfor %}
+                    </div>
+                    <div class="d-flex justify-content-between mt-2 text-muted small px-1">
+                        <span>Very Uncomfortable</span>
+                        <span>Very Comfortable</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-grid gap-2 mt-4 mb-5">
+                <button type="submit" class="btn btn-pace-primary btn-lg py-3">
+                    <i class="bi bi-file-check-fill"></i> Save Environmental Survey
+                </button>
+                <button type="button" class="btn btn-pace-outline" onclick="goToPhase(2)">
+                    <i class="bi bi-arrow-left-circle"></i> Back
+                </button>
+            </div>
         </div>
     </form>
 </div>
+
+<script>
+    function goToPhase(n) {
+        // Hide all phases
+        document.getElementById('phase-1').style.display = 'none';
+        document.getElementById('phase-2').style.display = 'none';
+        document.getElementById('phase-3').style.display = 'none';
+        // Show the target phase
+        document.getElementById('phase-' + n).style.display = 'block';
+
+        // Update progress dots
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById('phase-dot-' + i);
+            if (i <= n) {
+                dot.style.background = 'var(--pace-coral)';
+                dot.style.color = '#fff';
+            } else {
+                dot.style.background = '#fff';
+                dot.style.color = 'var(--pace-muted)';
+            }
+        }
+        // Scroll to top so the user sees the new phase from the beginning
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+</script>
 {% endblock %}

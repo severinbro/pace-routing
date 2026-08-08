@@ -12,7 +12,6 @@ from .models import (
     ParticulateMeasurement,
     NoiseMeasurement,
     EnvironmentSurvey,
-    RelativeImportanceSurvey,
 )
 from .exports import write_sensor_gpkg, export_filename
 
@@ -59,13 +58,8 @@ class NoiseMeasurementAdmin(admin.ModelAdmin):
 
 @admin.register(EnvironmentSurvey)
 class EnvironmentSurveyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'timestamp', 'user', 'gnss_snapshot')
-    ordering = ('-id',)
-
-
-@admin.register(RelativeImportanceSurvey)
-class RelativeImportanceSurveyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'timestamp', 'user', 'gnss_snapshot')
+    list_display = ('id', 'timestamp', 'user', 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7', 'q8', 'q9', 'q10', 'q11', 'gnss_snapshot')
+    list_filter = ('user',)
     ordering = ('-id',)
 
 

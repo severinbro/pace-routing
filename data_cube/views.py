@@ -48,7 +48,7 @@ def admin_home(request):
 # --- ADMIN-ONLY: CREATE NON-ADMIN USER ---
 @staff_member_required(login_url='admin_login')
 def create_user(request):
-    """Allows an admin to create a new non-admin (surveyor) account."""
+    """Allows an admin to create a new non-admin (participant) account."""
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
         if form.is_valid():
@@ -60,67 +60,73 @@ def create_user(request):
         form = UserCreationForm()
     return render(request, 'data_cube/create_user.html', {'form': form})
 
-# --- TAB: SURVEY DASHBOARD (LOBBY) ---
-def surveys_tab(request):
-    """Renders the landing page for the two survey types."""
-    return render(request, 'data_cube/surveys_lobby.html')
+# --- PUBLIC: SELF-SERVICE SIGN UP ---
+def sign_up(request):
+    """Allows participants to create their own anonymous account.
 
-# --- SURVEY SUB-PAGES ---
+    Only a username and password are required so that participants stay
+    anonymous. Created accounts are non-admin (is_staff=False).
+    """
+    if request.method == 'POST':
+        form = UserCreationForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.is_staff = False
+            user.save()
+            login(request, user)
+            return redirect('surveys_tab')
+    else:
+        form = UserCreationForm()
+    return render(request, 'data_cube/sign_up.html', {'form': form})
+
+# --- SURVEY (the single survey page, served at the root URL) ---
 @login_required(login_url='admin_login')
-def survey_environment(request):
-    from data_cube.models import EnvironmentSurvey, GNSSMeasurement
+def surveys_tab(request):
+    """Renders the environmental survey directly at the root URL."""
+    from data_cube.models import EnvironmentSurvey
+
+    # Phase 1: Environmental features (q1-q7)
+    phase1_features = [
+        {"id": 1, "label": "Noise",            "low": "Very Quiet",    "high": "Very Loud"},
+        {"id": 2, "label": "Air Quality",      "low": "Very Poor",     "high": "Excellent"},
+        {"id": 3, "label": "Air Temperature",  "low": "Very Cold",     "high": "Very Hot"},
+        {"id": 4, "label": "Aesthetics",       "low": "Unappealing",   "high": "Beautiful"},
+        {"id": 5, "label": "Diversity",        "low": "Monotonous",    "high": "Diverse"},
+        {"id": 6, "label": "Urban Design",     "low": "Poorly Designed","high": "Well Designed"},
+        {"id": 7, "label": "Accessibility",    "low": "Inaccessible",  "high": "Fully Accessible"},
+    ]
+
+    # Phase 2: Personal perception (q8-q10)
+    phase2_questions = [
+        {"id": 8,  "label": "How safe do you feel in this environment?",
+         "low": "Very Unsafe", "high": "Very Safe"},
+        {"id": 9,  "label": "How likely is it for you to enjoy staying here?",
+         "low": "Very Unlikely", "high": "Very Likely"},
+        {"id": 10, "label": "How stressed are you by the current environment?",
+         "low": "Not Stressed", "high": "Very Stressed"},
+    ]
 
     if request.method == 'POST':
-        # 1. Capture the current GNSS fix from Redis
+        # Capture the current GNSS fix from Redis
         gnss_snapshot = _capture_gnss_snapshot()
 
-        # 2. Create the survey record with the logged-in user
         EnvironmentSurvey.objects.create(
             user=request.user,
             q1=int(request.POST.get('q1')), q2=int(request.POST.get('q2')),
             q3=int(request.POST.get('q3')), q4=int(request.POST.get('q4')),
             q5=int(request.POST.get('q5')), q6=int(request.POST.get('q6')),
-            q7=int(request.POST.get('q7')), q8=int(request.POST.get('q8')),
-            q9=int(request.POST.get('q9')), q10=int(request.POST.get('q10')),
+            q7=int(request.POST.get('q7')),
+            q8=int(request.POST.get('q8')), q9=int(request.POST.get('q9')),
+            q10=int(request.POST.get('q10')),
+            q11=int(request.POST.get('q11')),
             gnss_snapshot=gnss_snapshot,
         )
         return redirect('surveys_tab')
 
-    return render(request, 'data_cube/survey_environment.html')
-
-@login_required(login_url='admin_login')
-def survey_priority(request):
-    """Renders the continuous slider survey."""
-    from data_cube.models import RelativeImportanceSurvey
-
-    comparison_pairs = [
-        {"id": "q1", "a": "Air Quality", "b": "Path Smoothness"},
-        {"id": "q2", "a": "Noise Level", "b": "Visual Aesthetics"},
-        {"id": "q3", "a": "Greenery", "b": "Path Width"},
-        {"id": "q4", "a": "Lighting", "b": "Safety"},
-        {"id": "q5", "a": "Cleanliness", "b": "Accessibility"},
-        {"id": "q6", "a": "Shade", "b": "Air Flow"},
-        {"id": "q7", "a": "Traffic Volume", "b": "Pedestrian Density"},
-        {"id": "q8", "a": "Surface Quality", "b": "Noise Reflection"},
-        {"id": "q9", "a": "Rest Areas", "b": "Connectivity"},
-        {"id": "q10", "a": "Aesthetics", "b": "Functionality"},
-    ]
-
-    if request.method == 'POST':
-        gnss_snapshot = _capture_gnss_snapshot()
-
-        RelativeImportanceSurvey.objects.create(
-            user=request.user,
-            q1=float(request.POST.get('q1', 0.5)), q2=float(request.POST.get('q2', 0.5)),
-            q3=float(request.POST.get('q3', 0.5)), q4=float(request.POST.get('q4', 0.5)),
-            q5=float(request.POST.get('q5', 0.5)), q6=float(request.POST.get('q6', 0.5)),
-            q7=float(request.POST.get('q7', 0.5)), q8=float(request.POST.get('q8', 0.5)),
-            q9=float(request.POST.get('q9', 0.5)), q10=float(request.POST.get('q10', 0.5)),
-            gnss_snapshot=gnss_snapshot,
-        )
-        return redirect('surveys_tab')
-
-    return render(request, 'data_cube/survey_priority.html', {'pairs': comparison_pairs})
+    return render(request, 'data_cube/survey_environment.html', {
+        'phase1_features': phase1_features,
+        'phase2_questions': phase2_questions,
+    })
 
 
 def _capture_gnss_snapshot():

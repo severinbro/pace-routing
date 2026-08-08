@@ -5,8 +5,8 @@
     <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3">
         <i class="bi bi-person-plus-fill"></i>
     </div>
-    <h2 class="fw-bold">Create Participant Account</h2>
-    <p class="text-muted">Create a new non-admin account for field participants.</p>
+    <h2 class="fw-bold">Sign Up</h2>
+    <p class="text-muted">Create an anonymous account to participate in surveys.<br>Only a username and password are needed.</p>
 </div>
 
 <div class="col-lg-5 mx-auto mt-4">
@@ -48,14 +48,10 @@
                 <button type="submit" class="btn btn-pace-mint btn-lg py-3">
                     <i class="bi bi-check-circle-fill"></i> Create Account
                 </button>
-                <a href="{% url 'admin_home' %}" class="btn btn-link text-muted">Back</a>
+                <a href="{% url 'admin_login' %}" class="btn btn-link text-muted">Already have an account? Sign In</a>
+                <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Back to Surveys</a>
             </div>
         </form>
-    </div>
-
-    <div class="alert mt-3 small" style="background: var(--pace-sky); color: var(--pace-ink);">
-        <i class="bi bi-info-circle"></i> Accounts created here are <strong>non-admin</strong>.
-        They can sign in and submit surveys, but cannot access the Dashboard, Map, or Data views.
     </div>
 </div>
 
