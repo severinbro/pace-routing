@@ -33,6 +33,9 @@ ALLOWED_HOSTS = ['*']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 
+# Trust the Pi hotspot HTTPS origin for CSRF (nginx terminates TLS on :8000)
+CSRF_TRUSTED_ORIGINS = ['https://10.42.0.1:8000']
+
 
 # Application definition
 
