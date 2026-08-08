@@ -38,8 +38,11 @@
 </div>
 
 <div class="text-center mt-5 mb-5">
-    <a href="{% url 'admin_logout' %}" class="btn btn-link text-muted">
-        <i class="bi bi-box-arrow-right"></i> Sign Out
-    </a>
+    <form method="post" action="{% url 'admin_logout' %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-link text-muted">
+            <i class="bi bi-box-arrow-right"></i> Sign Out
+        </button>
+    </form>
 </div>
 {% endblock %}
