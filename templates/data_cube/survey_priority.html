@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-5">
+        <div class="pace-icon-tile pace-icon-tile-sun mx-auto mb-3">
+            <i class="bi bi-trophy-fill"></i>
+        </div>
+        <h2 class="fw-bold">Priority Comparison</h2>
+        <p class="text-muted">Slide toward the feature that is more important to you.</p>
+    </div>
+
+    <form method="POST">
+        {% csrf_token %}
+
+        {% for pair in pairs %}
+        <div class="pace-card mb-4">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="fw-bold fs-5 text-start" style="color: var(--pace-coral);">{{ pair.a }}</span>
+                    <span class="fw-bold fs-5 text-end" style="color: var(--pace-mint);">{{ pair.b }}</span>
+                </div>
+
+                <input type="range" name="{{ pair.id }}" class="form-range" 
+                       min="0" max="1" step="0.01" value="0.5">
+
+                <div class="d-flex justify-content-between mt-2 text-muted small">
+                    <span>Definitively {{ pair.a }}</span>
+                    <span class="fw-bold">Neutral</span>
+                    <span>Definitively {{ pair.b }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="d-grid gap-2 mt-5 mb-5">
+            <button type="submit" class="btn btn-pace-mint btn-lg py-3">
+                <i class="bi bi-file-check-fill"></i> Submit Priority Survey
+            </button>
+            <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
