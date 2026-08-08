@@ -1,47 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="text-center mt-4">
+    <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3" style="width:72px;height:72px;font-size:2rem;">
+        <i class="bi bi-house-fill"></i>
+    </div>
     <h2 class="fw-bold">Admin Home</h2>
-    <p class="text-muted">Signed in as <strong>{{ request.user.username }}</strong>.</p>
+    <p class="text-muted">Signed in as <strong class="text-dark">{{ request.user.username }}</strong>.</p>
 </div>
 
-<div class="d-grid gap-4 col-lg-8 mx-auto mt-5">
-    <a href="{% url 'dashboard_tab' %}" class="btn btn-outline-primary btn-lg p-5 rounded-4 shadow-sm text-start">
+<div class="d-grid gap-4 col-lg-8 mx-auto mt-4">
+    <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-clipboard-data"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-coral me-4"><i class="bi bi-clipboard-data"></i></div>
             <div>
                 <h3 class="mb-1">Dashboard</h3>
-                <p class="mb-0 opacity-75">Live sensor telemetry grid.</p>
+                <p class="mb-0 text-muted">Live sensor telemetry grid.</p>
             </div>
         </div>
     </a>
 
-    <a href="{% url 'map_tab' %}" class="btn btn-outline-info btn-lg p-5 rounded-4 shadow-sm text-start">
+    <a href="{% url 'map_tab' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-map"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-sky me-4"><i class="bi bi-map"></i></div>
             <div>
                 <h3 class="mb-1">Map</h3>
-                <p class="mb-0 opacity-75">Offline OSM map with live position.</p>
+                <p class="mb-0 text-muted">Offline OSM map with live position.</p>
             </div>
         </div>
     </a>
 
-    <a href="{% url 'admin:index' %}" class="btn btn-outline-secondary btn-lg p-5 rounded-4 shadow-sm text-start">
+    <a href="{% url 'admin:index' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-database-fill"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-navy me-4"><i class="bi bi-database-fill"></i></div>
             <div>
                 <h3 class="mb-1">Data</h3>
-                <p class="mb-0 opacity-75">Browse database tables &amp; export GPKG.</p>
+                <p class="mb-0 text-muted">Browse database tables &amp; export GPKG.</p>
             </div>
         </div>
     </a>
 
-    <a href="{% url 'create_user' %}" class="btn btn-outline-success btn-lg p-5 rounded-4 shadow-sm text-start">
+    <a href="{% url 'create_user' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-person-plus-fill"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-mint me-4"><i class="bi bi-person-plus-fill"></i></div>
             <div>
                 <h3 class="mb-1">Create Surveyor</h3>
-                <p class="mb-0 opacity-75">Create a new non-admin surveyor account.</p>
+                <p class="mb-0 text-muted">Create a new non-admin surveyor account.</p>
             </div>
         </div>
     </a>
@@ -50,7 +53,7 @@
 <div class="text-center mt-5 mb-5">
     <form method="post" action="{% url 'admin_logout' %}" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-link text-muted">
+        <button type="submit" class="btn btn-pace-outline">
             <i class="bi bi-box-arrow-right"></i> Sign Out
         </button>
     </form>

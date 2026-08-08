@@ -1,14 +1,20 @@
 {% extends "admin/index.html" %}
+{% load static %}
 
 {% block content %}
-<div style="margin: 0 0 20px;">
-    <a href="{% url 'admin:export_gpkg' %}" class="button" style="display:inline-block; padding:10px 16px; font-weight:bold;">
-        &#11015; Export Sensor Data (GPKG)
-    </a>
-    <p style="color:#666; margin-top:8px;">
+<link rel="stylesheet" href="{% static 'css/pace.css' %}">
+<div class="pace-card p-4 mb-4">
+    <div class="pace-section-title">
+        <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-download"></i></div>
+        Export Sensor Data
+    </div>
+    <p class="text-muted mb-3">
         Joins the 6 sensor tables (GNSS, Atmospheric, Accelerometer, Air Quality, Particulate, Noise) on their shared
         <code>id</code> column and uses GNSS latitude/longitude as point geometry.
     </p>
+    <a href="{% url 'admin:export_gpkg' %}" class="btn btn-pace-mint">
+        <i class="bi bi-file-earmark-zip-fill"></i> Export Sensor Data (GPKG)
+    </a>
 </div>
 {{ block.super }}
 {% endblock %}

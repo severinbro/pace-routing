@@ -1,0 +1,252 @@
+/* ============================================================
+   PACE — 2D Flat Playful Design System
+   ============================================================
+   Bright, rounded, no shadows (flat), bold colors, chunky
+   borders, playful hover states. Built on top of Bootstrap 5.
+   ============================================================ */
+
+:root {
+    /* Brand palette — vibrant, flat */
+    --pace-bg:        #FFF8F0;   /* warm off-white canvas */
+    --pace-navy:      #2B2D6B;   /* deep navy for text / nav */
+    --pace-coral:     #FF6B6B;   /* primary accent (coral) */
+    --pace-mint:      #4ECDC4;   /* secondary accent (mint) */
+    --pace-sun:       #FFD93D;   /* tertiary accent (sun yellow) */
+    --pace-sky:       #6EC6FF;   /* info accent (sky blue) */
+    --pace-lavender:  #B19CD9;   /* soft purple */
+    --pace-ink:       #2B2D6B;   /* primary text */
+    --pace-muted:     #8B8FA3;   /* muted text */
+    --pace-card:      #FFFFFF;   /* card surface */
+    --pace-border:    #2B2D6B;   /* chunky border color */
+    --pace-radius:    20px;
+    --pace-radius-sm: 12px;
+    --pace-radius-lg: 28px;
+}
+
+/* ---- Base ---- */
+body {
+    background-color: var(--pace-bg);
+    color: var(--pace-ink);
+    font-family: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    padding-top: 80px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 800;
+    color: var(--pace-ink);
+}
+
+.text-muted { color: var(--pace-muted) !important; }
+
+/* ---- Flat Card (no shadow, chunky border, rounded) ---- */
+.pace-card {
+    background: var(--pace-card);
+    border: 3px solid var(--pace-border);
+    border-radius: var(--pace-radius);
+    box-shadow: none;
+    transition: transform 0.15s ease;
+}
+.pace-card-hover:hover {
+    transform: translateY(-3px);
+}
+
+/* ---- Flat Buttons ---- */
+.btn { font-weight: 700; border-radius: var(--pace-radius-sm); }
+.btn-lg { border-radius: var(--pace-radius); }
+
+.btn-pace-primary {
+    background: var(--pace-coral);
+    border: 3px solid var(--pace-border);
+    color: #fff;
+}
+.btn-pace-primary:hover {
+    background: #ff5252;
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.btn-pace-mint {
+    background: var(--pace-mint);
+    border: 3px solid var(--pace-border);
+    color: #fff;
+}
+.btn-pace-mint:hover {
+    background: #3bb5ac;
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.btn-pace-sun {
+    background: var(--pace-sun);
+    border: 3px solid var(--pace-border);
+    color: var(--pace-ink);
+}
+.btn-pace-sun:hover {
+    background: #f0c800;
+    color: var(--pace-ink);
+    transform: translateY(-2px);
+}
+
+.btn-pace-sky {
+    background: var(--pace-sky);
+    border: 3px solid var(--pace-border);
+    color: var(--pace-ink);
+}
+.btn-pace-sky:hover {
+    background: #4ab3f0;
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.btn-pace-outline {
+    background: var(--pace-card);
+    border: 3px solid var(--pace-border);
+    color: var(--pace-ink);
+}
+.btn-pace-outline:hover {
+    background: var(--pace-navy);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+/* ---- Navbar (flat, bold) ---- */
+.pace-navbar {
+    background: var(--pace-navy) !important;
+    border-bottom: 3px solid var(--pace-border);
+    box-shadow: none !important;
+}
+.pace-navbar .nav-link {
+    color: rgba(255,255,255,0.7) !important;
+    font-weight: 700;
+    border-radius: var(--pace-radius-sm);
+    margin: 0 2px;
+    transition: background 0.15s, color 0.15s;
+}
+.pace-navbar .nav-link:hover {
+    color: #fff !important;
+    background: rgba(255,255,255,0.12);
+}
+.pace-navbar .nav-link.active {
+    color: var(--pace-navy) !important;
+    background: var(--pace-sun);
+}
+.pace-navbar .nav-link i { font-size: 1.3rem; }
+
+/* ---- Badges / Pills ---- */
+.pace-badge {
+    border: 2px solid var(--pace-border);
+    border-radius: 50px;
+    font-weight: 700;
+    padding: 6px 16px;
+}
+
+/* ---- Form Controls ---- */
+.form-control, .form-select {
+    border: 2px solid var(--pace-border);
+    border-radius: var(--pace-radius-sm);
+    font-weight: 600;
+}
+.form-control:focus, .form-select:focus {
+    border-color: var(--pace-coral);
+    box-shadow: none;
+}
+.form-label { font-weight: 700; color: var(--pace-ink); }
+
+/* ---- Range Slider (playful) ---- */
+.form-range {
+    height: 1.5rem;
+}
+.form-range::-webkit-slider-runnable-track {
+    height: 12px;
+    border-radius: 50px;
+    background: var(--pace-bg);
+    border: 2px solid var(--pace-border);
+}
+.form-range::-webkit-slider-thumb {
+    background: var(--pace-mint);
+    height: 1.8rem;
+    width: 1.8rem;
+    border: 3px solid var(--pace-border);
+    border-radius: 50%;
+    margin-top: -9px;
+}
+.form-range::-moz-range-track {
+    height: 12px;
+    border-radius: 50px;
+    background: var(--pace-bg);
+    border: 2px solid var(--pace-border);
+}
+.form-range::-moz-range-thumb {
+    background: var(--pace-mint);
+    height: 1.8rem;
+    width: 1.8rem;
+    border: 3px solid var(--pace-border);
+    border-radius: 50%;
+}
+
+/* ---- Radio Buttons (Likert) ---- */
+.btn-check:checked + .btn {
+    background: var(--pace-coral) !important;
+    color: #fff !important;
+    border-color: var(--pace-border) !important;
+}
+
+/* ---- Big Number Display ---- */
+.pace-big-num {
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: var(--pace-ink);
+    line-height: 1;
+}
+
+/* ---- Icon Tile (playful colored circle behind icon) ---- */
+.pace-icon-tile {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3px solid var(--pace-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+.pace-icon-tile-coral   { background: var(--pace-coral);    color: #fff; }
+.pace-icon-tile-mint    { background: var(--pace-mint);     color: #fff; }
+.pace-icon-tile-sun     { background: var(--pace-sun);      color: var(--pace-ink); }
+.pace-icon-tile-sky     { background: var(--pace-sky);      color: var(--pace-ink); }
+.pace-icon-tile-lavender{ background: var(--pace-lavender); color: #fff; }
+.pace-icon-tile-navy    { background: var(--pace-navy);     color: #fff; }
+
+/* ---- Data Row (label / value pairs) ---- */
+.pace-data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 2px dashed #E0E0E8;
+}
+.pace-data-row:last-child { border-bottom: none; }
+.pace-data-row .label { color: var(--pace-muted); font-weight: 600; }
+.pace-data-row .value { font-weight: 800; font-size: 1.15rem; }
+
+/* ---- Section Title ---- */
+.pace-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 1.15rem;
+    margin-bottom: 12px;
+}
+
+/* ---- Alert (flat) ---- */
+.alert {
+    border: 2px solid var(--pace-border);
+    border-radius: var(--pace-radius-sm);
+    box-shadow: none;
+}
+
+/* ---- Utility ---- */
+.pace-rounded { border-radius: var(--pace-radius) !important; }
+.pace-rounded-lg { border-radius: var(--pace-radius-lg) !important; }

@@ -1,14 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-<style>
-    .slider-label { width: 40%; font-weight: bold; font-size: 1.1rem; }
-    .form-range::-webkit-slider-thumb { background: #198754; height: 1.5rem; width: 1.5rem; }
-</style>
-
 <div class="container py-4">
     <div class="text-center mb-5">
-        <h2 class="fw-bold"><i class="bi bi-trophy-fill"></i> Priority Comparison</h2>
+        <div class="pace-icon-tile pace-icon-tile-sun mx-auto mb-3" style="width:72px;height:72px;font-size:2rem;">
+            <i class="bi bi-trophy-fill"></i>
+        </div>
+        <h2 class="fw-bold">Priority Comparison</h2>
         <p class="text-muted">Slide toward the feature that is more important to you.</p>
     </div>
 
@@ -16,11 +14,11 @@
         {% csrf_token %}
 
         {% for pair in pairs %}
-        <div class="card mb-4 shadow-sm border-0 rounded-4">
+        <div class="pace-card mb-4">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <span class="slider-label text-start text-primary">{{ pair.a }}</span>
-                    <span class="slider-label text-end text-success">{{ pair.b }}</span>
+                    <span class="fw-bold fs-5 text-start" style="color: var(--pace-coral);">{{ pair.a }}</span>
+                    <span class="fw-bold fs-5 text-end" style="color: var(--pace-mint);">{{ pair.b }}</span>
                 </div>
 
                 <input type="range" name="{{ pair.id }}" class="form-range" 
@@ -36,7 +34,7 @@
         {% endfor %}
 
         <div class="d-grid gap-2 mt-5 mb-5">
-            <button type="submit" class="btn btn-success btn-lg py-3 rounded-pill shadow">
+            <button type="submit" class="btn btn-pace-mint btn-lg py-3">
                 <i class="bi bi-file-check-fill"></i> Submit Priority Survey
             </button>
             <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Cancel</a>

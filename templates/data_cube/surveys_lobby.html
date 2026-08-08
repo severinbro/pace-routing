@@ -1,12 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="text-center mt-4">
+    <div class="pace-icon-tile pace-icon-tile-coral mx-auto mb-3" style="width:80px;height:80px;font-size:2.2rem;">
+        <i class="bi bi-clipboard-check-fill"></i>
+    </div>
     <h2 class="fw-bold">Field Survey Station</h2>
     {% if request.user.is_authenticated %}
-    <p class="text-muted">Signed in as <strong>{{ request.user.username }}</strong>. Select the type of data you are collecting.</p>
+    <p class="text-muted">Signed in as <strong class="text-dark">{{ request.user.username }}</strong>.<br>Select the type of data you are collecting.</p>
     {% else %}
     <p class="text-muted">Please sign in to submit surveys.</p>
-    <a href="{% url 'admin_login' %}" class="btn btn-sm btn-outline-secondary rounded-pill mt-2">
+    <a href="{% url 'admin_login' %}" class="btn btn-pace-primary mt-2">
         <i class="bi bi-box-arrow-in-right"></i> Sign In
     </a>
     {% endif %}
@@ -14,22 +17,22 @@
 
 {% if request.user.is_authenticated %}
 <div class="d-grid gap-4 col-lg-8 mx-auto mt-5">
-    <a href="{% url 'survey_environment' %}" class="btn btn-outline-primary btn-lg p-5 rounded-4 shadow-sm text-start">
+    <a href="{% url 'survey_environment' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-leaf-fill"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-mint me-4"><i class="bi bi-leaf-fill"></i></div>
             <div>
                 <h3 class="mb-1">Environmental Rating</h3>
-                <p class="mb-0 opacity-75">1-5 Likert Scale for current path features.</p>
+                <p class="mb-0 text-muted">1-5 Likert Scale for current path features.</p>
             </div>
         </div>
     </a>
 
-    <a href="{% url 'survey_priority' %}" class="btn btn-outline-success btn-lg p-5 rounded-4 shadow-sm text-start">
+    <a href="{% url 'survey_priority' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
         <div class="d-flex align-items-center">
-            <div class="display-4 me-4"><i class="bi bi-trophy-fill"></i></div>
+            <div class="pace-icon-tile pace-icon-tile-sun me-4"><i class="bi bi-trophy-fill"></i></div>
             <div>
                 <h3 class="mb-1">Priority Comparison</h3>
-                <p class="mb-0 opacity-75">Subjective importance slider (Feature A vs B).</p>
+                <p class="mb-0 text-muted">Subjective importance slider (Feature A vs B).</p>
             </div>
         </div>
     </a>

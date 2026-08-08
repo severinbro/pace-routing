@@ -3,7 +3,10 @@
 {% block content %}
 <div class="container py-4">
     <div class="text-center mb-5">
-        <h2 class="fw-bold"><i class="bi bi-leaf-fill"></i> Environmental Rating</h2>
+        <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3" style="width:72px;height:72px;font-size:2rem;">
+            <i class="bi bi-leaf-fill"></i>
+        </div>
+        <h2 class="fw-bold">Environmental Rating</h2>
         <p class="text-muted">Rate the current path features on a scale of 1 (Poor) to 5 (Excellent).</p>
     </div>
 
@@ -11,14 +14,14 @@
         {% csrf_token %}
         
         {% for i in "1234567890"|make_list %}
-        <div class="card mb-4 shadow-sm border-0 rounded-4">
+        <div class="pace-card mb-4 pace-card-hover">
             <div class="card-body p-4">
-                <h5 class="fw-bold mb-3">Feature {{ forloop.counter }}: <span class="text-primary">[Feature Name]</span></h5>
+                <h5 class="fw-bold mb-3">Feature {{ forloop.counter }}: <span style="color: var(--pace-coral);">[Feature Name]</span></h5>
                 
                 <div class="btn-group w-100" role="group" aria-label="Likert Scale">
                     {% for val in "12345"|make_list %}
                     <input type="radio" class="btn-check" name="q{{ forloop.parentloop.counter }}" id="q{{ forloop.parentloop.counter }}_{{ val }}" value="{{ val }}" required>
-                    <label class="btn btn-outline-primary py-3 fw-bold" for="q{{ forloop.parentloop.counter }}_{{ val }}">
+                    <label class="btn btn-pace-outline py-3 fw-bold" for="q{{ forloop.parentloop.counter }}_{{ val }}">
                         {{ val }}
                     </label>
                     {% endfor %}
@@ -33,7 +36,7 @@
         {% endfor %}
 
         <div class="d-grid gap-2 mt-5 mb-5">
-            <button type="submit" class="btn btn-primary btn-lg py-3 rounded-pill shadow">
+            <button type="submit" class="btn btn-pace-primary btn-lg py-3">
                 <i class="bi bi-file-check-fill"></i> Save Environmental Survey
             </button>
             <a href="{% url 'surveys_tab' %}" class="btn btn-link text-muted">Cancel</a>

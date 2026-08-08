@@ -7,51 +7,46 @@
     <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/leaflet.css' %}">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pace.css' %}">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
     <script src="{% static 'js/leaflet.js' %}"></script>
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/chart.umd.js' %}"></script>
-    
-    <style>
-        /* Custom Tablet-Friendly Styling */
-        body { padding-top: 65px; }
-        .nav-item { flex: 1; text-align: center; }
-        .nav-link { font-size: 1.2rem; padding: 15px !important; }
-    </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand navbar-dark bg-dark fixed-top shadow">
-        <div class="navbar-nav w-100">
+    <nav class="navbar navbar-expand fixed-top pace-navbar">
+        <div class="navbar-nav w-100 d-flex flex-row">
 
             {% if request.user.is_authenticated and request.user.is_staff %}
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}">
-                    <i class="bi bi-map"></i> Map
+                    <i class="bi bi-map"></i>
                 </a>
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'dashboard_tab' %}active{% endif %}" href="{% url 'dashboard_tab' %}">
-                    <i class="bi bi-clipboard-data"></i> Dashboard
+                    <i class="bi bi-clipboard-data"></i>
                 </a>
                 <a class="nav-item nav-link" href="{% url 'admin:index' %}">
-                    <i class="bi bi-database-fill"></i> Data
+                    <i class="bi bi-database-fill"></i>
                 </a>
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'create_user' %}">
-                    <i class="bi bi-person-plus-fill"></i> Users
+                    <i class="bi bi-person-plus-fill"></i>
                 </a>
             {% endif %}
 
             <a class="nav-item nav-link {% if 'survey' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'surveys_tab' %}">
-                <i class="bi bi-list-check"></i> Surveys
+                <i class="bi bi-list-check"></i>
             </a>
 
             {% if request.user.is_authenticated %}
-                <form class="nav-item d-flex" method="post" action="{% url 'admin_logout' %}">
+                <form class="nav-item d-flex ms-auto" method="post" action="{% url 'admin_logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="nav-link btn btn-link border-0 w-100 text-decoration-none">
-                        <i class="bi bi-box-arrow-right"></i> {{ request.user.username }}
+                        <i class="bi bi-box-arrow-right"></i>
                     </button>
                 </form>
             {% else %}
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'admin_login' %}active{% endif %}" href="{% url 'admin_login' %}">
-                    <i class="bi bi-box-arrow-in-right"></i> Sign In
+                <a class="nav-item nav-link ms-auto {% if request.resolver_match.url_name == 'admin_login' %}active{% endif %}" href="{% url 'admin_login' %}">
+                    <i class="bi bi-box-arrow-in-right"></i>
                 </a>
             {% endif %}
 

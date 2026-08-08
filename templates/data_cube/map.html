@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card overflow-hidden">
-    <div id="map" style="height: 80vh;"></div>
+<div class="pace-card overflow-hidden">
+    <div id="map" style="height: 80vh; border-radius: 17px;"></div>
 </div>
 
 <script>
@@ -13,14 +13,14 @@
         attribution: 'Offline RLP Map'
     }).addTo(map);
 
-    // 2. Create the blue dot vector marker
+    // 2. Create the flat dot vector marker (pace palette)
     var userMarker = L.circleMarker([49.99, 8.24], {
-        radius: 8,              // Size of the dot
-        fillColor: "#2A93EE",   // Classic GPS blue
-        fillOpacity: 1,         // Solid fill
-        color: "#FFFFFF",       // White border
-        weight: 3,              // Border thickness
-        opacity: 1              // Border opacity
+        radius: 10,
+        fillColor: "#FF6B6B",
+        fillOpacity: 1,
+        color: "#2B2D6B",
+        weight: 3,
+        opacity: 1
     }).addTo(map).bindPopup("Waiting for GPS...");
 
     // 3. The Dedicated Map Fetch Function
@@ -35,11 +35,10 @@
                     // Move the marker
                     userMarker.setLatLng(newLatLng);
                     
-                    // Update the popup to show satellite strength
-                    userMarker.setPopupContent(`<b>Live Fix</b><br>Satellites: ${data.sats}`);
+                    // Update the popup to show accuracy
+                    userMarker.setPopupContent(`<b>Live Fix</b><br>Accuracy: ±${(data.accuracy || 0).toFixed(1)}m`);
                     
-                    // Optional: Smoothly pan the camera to follow the user
-                    // (You can comment this out if you want to allow the user to drag the map around freely without snapping back)
+                    // Smoothly pan the camera to follow the user
                     map.panTo(newLatLng);
                 }
             })
