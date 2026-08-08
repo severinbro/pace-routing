@@ -80,7 +80,7 @@ services:
       - web
     devices:
       - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Bus
-      - "/dev/i2c-2:/dev/i2c-2"      # PMSA & GNSS Bus
+      - "/dev/i2c-2:/dev/i2c-2"      # PMSA Particulate Matter Bus
       - "/dev/snd:/dev/snd"          # Gives the container access to the USB mic
     privileged: true
     networks:

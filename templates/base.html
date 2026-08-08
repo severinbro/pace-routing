@@ -33,17 +33,20 @@
                 <a class="nav-item nav-link" href="{% url 'admin:index' %}">
                     <i class="bi bi-database-fill"></i> Data
                 </a>
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'create_user' %}">
+                    <i class="bi bi-person-plus-fill"></i> Users
+                </a>
             {% endif %}
 
             <a class="nav-item nav-link {% if 'survey' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'surveys_tab' %}">
                 <i class="bi bi-list-check"></i> Surveys
             </a>
 
-            {% if request.user.is_authenticated and request.user.is_staff %}
+            {% if request.user.is_authenticated %}
                 <form class="nav-item d-flex" method="post" action="{% url 'admin_logout' %}">
                     {% csrf_token %}
                     <button type="submit" class="nav-link btn btn-link border-0 w-100 text-decoration-none">
-                        <i class="bi bi-box-arrow-right"></i> Sign Out
+                        <i class="bi bi-box-arrow-right"></i> {{ request.user.username }}
                     </button>
                 </form>
             {% else %}
@@ -59,7 +62,66 @@
         {% block content %}{% endblock %}
     </main>
 
+    <!-- Hidden CSRF token for JS fetch calls -->
+    <input type="hidden" id="csrf-token" value="{{ csrf_token }}">
+
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/leaflet.js' %}"></script>
+
+    <!-- Smartphone GNSS Pusher: streams the admin phone's geolocation to the RPi5 -->
+    <!-- Only runs for authenticated admin (is_staff) users so non-admin phones don't interfere -->
+    {% if request.user.is_authenticated and request.user.is_staff %}
+    <script>
+    (function () {
+        if (!navigator.geolocation) {
+            console.warn("[GNSS] Geolocation API not available on this device.");
+            return;
+        }
+
+        var GNSS_ENDPOINT = "{% url 'api_update_gnss' %}";
+        var csrfToken = document.getElementById('csrf-token').value;
+
+        function pushFix(position) {
+            var payload = {
+                lat: position.coords.latitude,
+                lon: position.coords.longitude,
+                alt: position.coords.altitude || 0,
+                accuracy: position.coords.accuracy || 0,
+                alt_accuracy: position.coords.altitudeAccuracy || 0,
+                timestamp: position.timestamp,
+                utc_time: new Date(position.timestamp).toISOString()
+            };
+
+            fetch(GNSS_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(payload)
+            }).catch(function (err) {
+                console.error("[GNSS] Push failed:", err);
+            });
+        }
+
+        function handleError(err) {
+            console.warn("[GNSS] Geolocation error:", err.message);
+        }
+
+        // highAccuracy = true so the phone uses its GPS chip, not just WiFi/IP
+        var watchId = navigator.geolocation.watchPosition(
+            pushFix,
+            handleError,
+            {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            }
+        );
+
+        console.log("[GNSS] Geolocation watcher started (id=" + watchId + ").");
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

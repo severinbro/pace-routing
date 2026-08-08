@@ -34,20 +34,21 @@ try:
 except Exception as e:
     print(f"I2C Bus 1 Error: {e}")
     
-# 3. Init Bus 2 for GNSS & PMSA
-GPS_ADDR = 0x42
-BYTES_AVAIL_REG = 0xFD
-DATA_STREAM_REG = 0xFF
+# 3. Init Bus 2 for PMSA (GNSS now sourced from the smartphone via Redis)
 PMSA_ADDR = 0x12
 
 try:
     heavy_bus = SMBus(2) 
-    print("I2C Bus 2 (GNSS & PMSA) Initialized.")
+    print("I2C Bus 2 (PMSA) Initialized.")
 except Exception as e:
     print(f"I2C Bus 2 Error: {e}")
 
 # --- Global variables ---
-gps_data = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0 }
+# GNSS is now provided by the connected smartphone's browser, pushed to Redis
+# under 'gnss_phone' by the /api/update-gnss/ endpoint. The SAM-M10Q hardware
+# sensor was unreliable in the field and has been retired.
+gps_data = { "lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": 0, "accuracy": 0.0 }
+GNSS_STALE_SECONDS = 30  # If no phone fix in 30s, consider GNSS lost
 
 # --- Helper Functions ---
 def get_pm_data():
@@ -76,69 +77,40 @@ def get_noise_db(duration=0.5, fs=44100):
         return 0.0
 
 def update_gps_data():
+    """Reads the latest GNSS fix pushed by the smartphone from Redis.
+
+    The phone's browser calls /api/update-gnss/ with its geolocation, which
+    stores the fix under the 'gnss_phone' key. If the fix is stale (older than
+    GNSS_STALE_SECONDS) or missing, the last known values are retained but
+    marked as stale.
+    """
     global gps_data
-    buffer = ""
     try:
-        # 1. Check how many bytes are waiting in the SAM-M10Q buffer
-        waiting_bytes_list = heavy_bus.read_i2c_block_data(GPS_ADDR, BYTES_AVAIL_REG, 2)
-        num_bytes = (waiting_bytes_list[0] << 8) | waiting_bytes_list[1]
-        
-        # Ignore hardware glitch readings
-        if num_bytes == 0 or num_bytes == 65535 or num_bytes > 1024:
+        raw = r.get('gnss_phone')
+        if not raw:
             return
-            
-        time.sleep(0.01)
 
-        print(f"Found {num_bytes} bytes waiting in buffer...")
-        
-        # 2. Read the bytes in chunks
-        while num_bytes > 0:
-            chunk_size = min(num_bytes, 16)
-            data = heavy_bus.read_i2c_block_data(GPS_ADDR, DATA_STREAM_REG, chunk_size)
-            for byte in data:
-                if byte == 0xFF: 
-                    continue
-                buffer += chr(byte)
-            num_bytes -= chunk_size
+        fix = json.loads(raw)
+        received_at = fix.get('received_at', 0)
+        age = time.time() - received_at
 
-            time.sleep(0.02)
-            
-        # 3. Parse the NMEA sentences
-        if '$GNGGA' in buffer or '$GPGGA' in buffer:
-            lines = buffer.split('\n')
-            for line in lines:
-                if (line.startswith('$GNGGA') or line.startswith('$GPGGA')):
-                    parts = line.split(',')
-                    if len(parts) > 9 and parts[6] != '0' and parts[6] != '':
-                        try:
-                            lat_raw = float(parts[2])
-                            lat_deg = int(lat_raw / 100)
-                            lat_min = lat_raw - (lat_deg * 100)
-                            lat = lat_deg + (lat_min / 60)
-                            if parts[3] == 'S': lat = -lat
+        if age > GNSS_STALE_SECONDS:
+            print(f"Phone GNSS fix is stale ({age:.0f}s old). Keeping last known position.")
+            return
 
-                            lon_raw = float(parts[4])
-                            lon_deg = int(lon_raw / 100)
-                            lon_min = lon_raw - (lon_deg * 100)
-                            lon = lon_deg + (lon_min / 60)
-                            if parts[5] == 'W': lon = -lon
+        gps_data["lat"] = fix.get('lat', gps_data["lat"])
+        gps_data["lon"] = fix.get('lon', gps_data["lon"])
+        gps_data["alt"] = fix.get('alt', gps_data["alt"])
+        gps_data["accuracy"] = fix.get('accuracy', 0.0)
+        # The browser geolocation API does not expose satellite count.
+        # We leave sats at 0 to indicate "not applicable / phone source".
+        gps_data["sats"] = fix.get('sats', 0)
 
-                            gps_data["lat"] = lat
-                            gps_data["lon"] = lon
-                            gps_data["alt"] = float(parts[9])
-                            gps_data["sats"] = int(parts[7])
-
-                            print(f"SUCCESS -> Lat {lat:.5f}, Lon {lon:.5f}, Alt {gps_data['alt']}m, Sats {gps_data['sats']}")
-                        except ValueError:
-                            print(f"Parsing error on line: {line}")
-                            continue
-                    else:
-                        print(f"No fix yet. Satellites visible: {parts[7] if len(parts) > 7 else '0'}")
-                        visible_sats = int(parts[7]) if len(parts) > 7 and parts[7].isdigit() else 0
-                        gps_data["sats"] = visible_sats
+        print(f"Phone GNSS -> Lat {gps_data['lat']:.5f}, Lon {gps_data['lon']:.5f}, "
+              f"Alt {gps_data['alt']}m, Acc ±{gps_data['accuracy']:.1f}m")
 
     except Exception as e:
-        print(f"GPS read error: {e}")
+        print(f"GPS read error (Redis/phone): {e}")
 
 # --- Main Loop ---
 print("ElderPace Sensor Worker Running...")
@@ -175,6 +147,7 @@ while True:
             "lon": gps_data["lon"],
             "alt": gps_data["alt"],
             "sats": gps_data["sats"],
+            "accuracy": gps_data["accuracy"],
             "tempC": round(tempC, 2),
             "preshPa": round(preshPa, 2),
             "humRH": round(humRH, 2),
@@ -199,7 +172,7 @@ while True:
         if loop_count % 5 == 0:
             r.rpush('sensor_db_queue', payload)
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            print(f"[{timestamp}] GPS: {gps_data['lat']:.5f}, {gps_data['lon']:.5f}, Sats: {gps_data['sats']} | Temp: {tempC:.1f}°C | Humidity: {humRH:.1f}% | AQI: {aqi_val} | eCO2: {eco2_val}ppm | TVOC: {tvoc_val}ppb | PM2.5: {pm25}µg/m³ | Noise: {noise_db}dB")
+            print(f"[{timestamp}] GPS: {gps_data['lat']:.5f}, {gps_data['lon']:.5f}, Acc ±{gps_data['accuracy']:.1f}m | Temp: {tempC:.1f}°C | Humidity: {humRH:.1f}% | AQI: {aqi_val} | eCO2: {eco2_val}ppm | TVOC: {tvoc_val}ppb | PM2.5: {pm25}µg/m³ | Noise: {noise_db}dB")
         else:
             print("...")
             

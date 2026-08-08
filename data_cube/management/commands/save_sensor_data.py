@@ -28,7 +28,8 @@ class Command(BaseCommand):
                         latitude=data.get('lat'),
                         longitude=data.get('lon'),
                         altitude=data.get('alt'),
-                        satellites=data.get('sats')
+                        satellites=data.get('sats'),
+                        accuracy=data.get('accuracy')
                     )
 
                 # 2. Save Atmosphere

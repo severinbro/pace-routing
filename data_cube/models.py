@@ -1,16 +1,18 @@
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.contrib.auth.models import User
 
 
 ## ----- Sensor Tables -----
 
-# 1. GNSS Data Table (SAM-Q10M)
+# 1. GNSS Data Table (sourced from the connected smartphone's browser)
 class GNSSMeasurement(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     latitude = models.DecimalField(max_digits=12, decimal_places=9)
     longitude = models.DecimalField(max_digits=12, decimal_places=9)
     altitude = models.FloatField(null=True)
     satellites = models.IntegerField(default=0)
+    accuracy = models.FloatField(default=0.0, help_text="Position accuracy in meters (from phone GPS)")
     
     @property
     def date_display(self):
@@ -58,6 +60,7 @@ class NoiseMeasurement(models.Model):
 # 1. Environment Survey Form (Likert-Scales)
 class EnvironmentSurvey(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Questions 1-10
     q1 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
@@ -77,6 +80,7 @@ class EnvironmentSurvey(models.Model):
 # 2. Relative Importance Survey Form (AHP, Pairwise Comparison)
 class RelativeImportanceSurvey(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     
     # Questions (Continuous Slider: 0.0 (Feature A) to 1.0 (Feature B). 0.5 is Neutral)
     q1 = models.FloatField(default=0.5)

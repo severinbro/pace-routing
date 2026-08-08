@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="text-center mt-4">
+    <h2 class="fw-bold"><i class="bi bi-person-plus-fill"></i> Create Surveyor Account</h2>
+    <p class="text-muted">Create a new non-admin account for field surveyors.</p>
+</div>
+
+<div class="col-lg-5 mx-auto mt-4">
+    <div class="card p-4 shadow-sm border-0 rounded-4">
+        {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+            Please correct the errors below.
+        </div>
+        {% endif %}
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                {{ form.username }}
+                {% if form.username.help_text %}
+                <small class="form-text text-muted">{{ form.username.help_text }}</small>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="{{ form.password1.id_for_label }}" class="form-label">Password</label>
+                {{ form.password1 }}
+                {% if form.password1.help_text %}
+                <small class="form-text text-muted">{{ form.password1.help_text }}</small>
+                {% endif %}
+            </div>
+
+            <div class="mb-3">
+                <label for="{{ form.password2.id_for_label }}" class="form-label">Confirm Password</label>
+                {{ form.password2 }}
+                {% if form.password2.help_text %}
+                <small class="form-text text-muted">{{ form.password2.help_text }}</small>
+                {% endif %}
+            </div>
+
+            <div class="d-grid gap-2 mt-4">
+                <button type="submit" class="btn btn-primary btn-lg py-3 rounded-pill shadow">
+                    <i class="bi bi-check-circle-fill"></i> Create Account
+                </button>
+                <a href="{% url 'admin_home' %}" class="btn btn-link text-muted">Back</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="alert alert-info mt-3 small" role="alert">
+        <i class="bi bi-info-circle"></i> Accounts created here are <strong>non-admin</strong>.
+        They can sign in and submit surveys, but cannot access the Dashboard, Map, or Data views.
+    </div>
+</div>
+
+<script>
+    // Bootstrap-ify Django's default form widgets
+    document.querySelectorAll('input[type="text"], input[type="password"]').forEach(function (el) {
+        el.classList.add('form-control');
+    });
+</script>
+{% endblock %}

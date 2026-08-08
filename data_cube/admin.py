@@ -21,7 +21,7 @@ from .exports import write_sensor_gpkg, export_filename
 
 @admin.register(GNSSMeasurement)
 class GNSSMeasurementAdmin(admin.ModelAdmin):
-    list_display = ('id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites')
+    list_display = ('id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites', 'accuracy')
     ordering = ('-id',)
 
 
@@ -59,13 +59,13 @@ class NoiseMeasurementAdmin(admin.ModelAdmin):
 
 @admin.register(EnvironmentSurvey)
 class EnvironmentSurveyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'timestamp', 'gnss_snapshot')
+    list_display = ('id', 'timestamp', 'user', 'gnss_snapshot')
     ordering = ('-id',)
 
 
 @admin.register(RelativeImportanceSurvey)
 class RelativeImportanceSurveyAdmin(admin.ModelAdmin):
-    list_display = ('id', 'timestamp', 'gnss_snapshot')
+    list_display = ('id', 'timestamp', 'user', 'gnss_snapshot')
     ordering = ('-id',)
 
 

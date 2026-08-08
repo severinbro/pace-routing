@@ -67,10 +67,14 @@
                     <span class="text-muted">Altitude</span>
                     <span class="font-monospace fw-bold"><span id="alt">--</span> m</span>
                 </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="text-muted">Accuracy</span>
+                    <span class="font-monospace fw-bold">±<span id="acc">--</span> m</span>
+                </div>
                 <div style="height: 100px;">
                     <canvas id="satsChart"></canvas>
                 </div>
-                <small class="text-center text-muted mt-1">Satellites in View</small>
+                <small class="text-center text-muted mt-1">Position Accuracy (m)</small>
             </div>
         </div>
     </div>
@@ -189,23 +193,23 @@
         options: chartOptions
     });
 
-    // 4. Satellites Chart
+    // 4. Accuracy Chart (replaces former Satellites chart)
     const satsChart = new Chart(document.getElementById('satsChart'), {
         type: 'line',
         data: {
             labels: Array(MAX_DATA_POINTS).fill(''),
             datasets: [{ 
-                label: 'Satellites', 
+                label: 'Accuracy (m)', 
                 borderColor: '#0dcaf0', // Bootstrap Info Color
                 backgroundColor: 'rgba(13, 202, 240, 0.1)', 
                 data: [], 
                 fill: true,
-                tension: 0.1 // Straighter lines for integer counts
+                tension: 0.1
             }]
         },
         options: {
             ...chartOptions,
-            scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 12 } }
+            scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 50, reverse: true } }
         }
     });
 
@@ -252,6 +256,7 @@
                 document.getElementById('lat').innerText = data.lat.toFixed(6);
                 document.getElementById('lon').innerText = data.lon.toFixed(6);
                 document.getElementById('alt').innerText = data.alt.toFixed(1);
+                document.getElementById('acc').innerText = (data.accuracy || 0).toFixed(1);
 
                 // Acceleration Text
                 // document.getElementById('accX').innerText = data.acc[0].toFixed(0);
@@ -276,7 +281,7 @@
                 updateCharts(accelChart, [data.acc[0], data.acc[1], data.acc[2]]);
                 updateCharts(gyroChart, [data.ang[0], data.ang[1], data.ang[2]]);
                 updateCharts(noiseChart, [realNoise]);
-                updateCharts(satsChart, [data.sats]);
+                updateCharts(satsChart, [data.accuracy || 0]);
                 updateCharts(pmChart, [data.pm1, data.pm25, data.pm10]);
 
                 // --- Styling Logic ---

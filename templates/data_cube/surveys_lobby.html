@@ -2,15 +2,17 @@
 {% block content %}
 <div class="text-center mt-4">
     <h2 class="fw-bold">Field Survey Station</h2>
-    <p class="text-muted">Select the type of data you are collecting at this location.</p>
-
-    {% if not request.user.is_authenticated %}
+    {% if request.user.is_authenticated %}
+    <p class="text-muted">Signed in as <strong>{{ request.user.username }}</strong>. Select the type of data you are collecting.</p>
+    {% else %}
+    <p class="text-muted">Please sign in to submit surveys.</p>
     <a href="{% url 'admin_login' %}" class="btn btn-sm btn-outline-secondary rounded-pill mt-2">
-        <i class="bi bi-shield-lock"></i> Sign In
+        <i class="bi bi-box-arrow-in-right"></i> Sign In
     </a>
     {% endif %}
 </div>
 
+{% if request.user.is_authenticated %}
 <div class="d-grid gap-4 col-lg-8 mx-auto mt-5">
     <a href="{% url 'survey_environment' %}" class="btn btn-outline-primary btn-lg p-5 rounded-4 shadow-sm text-start">
         <div class="d-flex align-items-center">
@@ -32,4 +34,5 @@
         </div>
     </a>
 </div>
+{% endif %}
 {% endblock %}
