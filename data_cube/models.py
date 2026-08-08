@@ -5,8 +5,8 @@ from django.contrib.auth.models import User
 
 ## ----- Sensor Tables -----
 
-# 1. GNSS Data Table (sourced from the connected smartphone's browser)
-class GNSSMeasurement(models.Model):
+# 1a. GNSS Data Table — Phone (sourced from the admin smartphone's browser)
+class GNSSPhoneMeasurement(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     latitude = models.DecimalField(max_digits=12, decimal_places=9)
     longitude = models.DecimalField(max_digits=12, decimal_places=9)
@@ -17,6 +17,14 @@ class GNSSMeasurement(models.Model):
     @property
     def date_display(self):
         return self.timestamp.strftime('%d-%m-%Y')
+
+# 1b. GNSS Data Table — Sensor (SAM-M10Q via I2C)
+class GNSSSensorMeasurement(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    latitude = models.DecimalField(max_digits=12, decimal_places=9)
+    longitude = models.DecimalField(max_digits=12, decimal_places=9)
+    altitude = models.FloatField(null=True)
+    satellites = models.IntegerField(default=0)
 
 # 2. Atmospheric Data Table (BME280)
 class AtmosphericMeasurement(models.Model):
@@ -80,4 +88,4 @@ class EnvironmentSurvey(models.Model):
     q11 = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(7)])  # Comfort
 
     # Foreign keys to link a survey to the exact sensor state at that moment
-    gnss_snapshot = models.OneToOneField(GNSSMeasurement, on_delete=models.CASCADE, null=True)
+    gnss_snapshot = models.OneToOneField(GNSSPhoneMeasurement, on_delete=models.CASCADE, null=True)

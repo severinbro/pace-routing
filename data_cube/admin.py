@@ -3,7 +3,8 @@ import os
 from django.contrib import admin
 
 from .models import (
-    GNSSMeasurement,
+    GNSSPhoneMeasurement,
+    GNSSSensorMeasurement,
     AtmosphericMeasurement,
     AccelerometerMeasurement,
     AirQualityMeasurement,
@@ -15,9 +16,15 @@ from .models import (
 
 ## ----- Sensor Tables -----
 
-@admin.register(GNSSMeasurement)
-class GNSSMeasurementAdmin(admin.ModelAdmin):
+@admin.register(GNSSPhoneMeasurement)
+class GNSSPhoneMeasurementAdmin(admin.ModelAdmin):
     list_display = ('id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites', 'accuracy')
+    ordering = ('-id',)
+
+
+@admin.register(GNSSSensorMeasurement)
+class GNSSSensorMeasurementAdmin(admin.ModelAdmin):
+    list_display = ('id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites')
     ordering = ('-id',)
 
 

@@ -79,8 +79,8 @@ services:
       - redis
       - web
     devices:
-      - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Bus
-      - "/dev/i2c-2:/dev/i2c-2"      # PMSA Particulate Matter Bus
+      - "/dev/i2c-1:/dev/i2c-1"      # PiicoDev Sensors & SAM-M10Q GNSS (3.3V)
+      - "/dev/i2c-2:/dev/i2c-2"      # PMSA Particulate Matter (5V)
       - "/dev/snd:/dev/snd"          # Gives the container access to the USB mic
     privileged: true
     networks:

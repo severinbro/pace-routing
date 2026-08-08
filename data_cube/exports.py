@@ -15,7 +15,8 @@ import geopandas as gpd
 from shapely.geometry import Point
 
 from .models import (
-    GNSSMeasurement,
+    GNSSPhoneMeasurement,
+    GNSSSensorMeasurement,
     AtmosphericMeasurement,
     AccelerometerMeasurement,
     AirQualityMeasurement,
@@ -25,13 +26,13 @@ from .models import (
 
 
 def build_sensor_geodataframe():
-    """Builds a GeoDataFrame joining all 6 sensor tables on id.
+    """Builds a GeoDataFrame joining all sensor tables on id.
 
-    GNSSMeasurement is the base table (it provides the geometry), the other
-    5 tables are left-joined onto it by id so every row keeps a valid point.
+    GNSSPhoneMeasurement is the base table (it provides the geometry), the other
+    tables are left-joined onto it by id so every row keeps a valid point.
     """
     gnss_df = pd.DataFrame.from_records(
-        GNSSMeasurement.objects.values(
+        GNSSPhoneMeasurement.objects.values(
             'id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites'
         )
     )
@@ -62,7 +63,7 @@ def build_sensor_geodataframe():
         # Avoid duplicate/clashing "timestamp" columns from each table.
         merged = merged.merge(df, on='id', how='left', suffixes=('', f'_{model.__name__}'))
 
-    # Latitude/Longitude come from GNSSMeasurement as Decimal -> cast to float.
+    # Latitude/Longitude come from GNSSPhoneMeasurement as Decimal -> cast to float.
     merged['latitude'] = merged['latitude'].astype(float)
     merged['longitude'] = merged['longitude'].astype(float)
 

@@ -2,7 +2,8 @@ import json
 import redis
 from django.core.management.base import BaseCommand
 from data_cube.models import (
-    GNSSMeasurement, 
+    GNSSPhoneMeasurement,
+    GNSSSensorMeasurement,
     AtmosphericMeasurement, 
     AccelerometerMeasurement, 
     AirQualityMeasurement,
@@ -22,14 +23,23 @@ class Command(BaseCommand):
                 queue_name, message = r.blpop('sensor_db_queue')
                 data = json.loads(message.decode('utf-8'))
                 
-                # 1. Save GNSS
+                # 1a. Save Phone GNSS
                 if data.get('lat') is not None and data.get('lon') is not None:
-                    GNSSMeasurement.objects.create(
+                    GNSSPhoneMeasurement.objects.create(
                         latitude=data.get('lat'),
                         longitude=data.get('lon'),
                         altitude=data.get('alt'),
                         satellites=data.get('sats'),
                         accuracy=data.get('accuracy')
+                    )
+
+                # 1b. Save Sensor GNSS (SAM-M10Q)
+                if data.get('sensor_lat') is not None and data.get('sensor_lon') is not None:
+                    GNSSSensorMeasurement.objects.create(
+                        latitude=data.get('sensor_lat'),
+                        longitude=data.get('sensor_lon'),
+                        altitude=data.get('sensor_alt'),
+                        satellites=data.get('sensor_sats')
                     )
 
                 # 2. Save Atmosphere

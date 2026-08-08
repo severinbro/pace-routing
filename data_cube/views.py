@@ -44,18 +44,27 @@ def dashboard_tab(request):
 def data_browser(request):
     """Renders a custom data browser page with tabbed CMS-style tables."""
     from data_cube.models import (
-        GNSSMeasurement, AtmosphericMeasurement, AccelerometerMeasurement,
+        GNSSPhoneMeasurement, GNSSSensorMeasurement,
+        AtmosphericMeasurement, AccelerometerMeasurement,
         AirQualityMeasurement, ParticulateMeasurement, NoiseMeasurement,
         EnvironmentSurvey,
     )
 
     tables = [
         {
-            'key': 'gnss',
-            'label': 'GNSS',
+            'key': 'gnss_phone',
+            'label': 'GNSS Phone',
             'columns': ['ID', 'Timestamp', 'Latitude', 'Longitude', 'Altitude', 'Satellites', 'Accuracy'],
-            'rows': list(GNSSMeasurement.objects.order_by('-id')[:200].values_list(
+            'rows': list(GNSSPhoneMeasurement.objects.order_by('-id')[:200].values_list(
                 'id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites', 'accuracy'
+            )),
+        },
+        {
+            'key': 'gnss_sensor',
+            'label': 'GNSS Sensor',
+            'columns': ['ID', 'Timestamp', 'Latitude', 'Longitude', 'Altitude', 'Satellites'],
+            'rows': list(GNSSSensorMeasurement.objects.order_by('-id')[:200].values_list(
+                'id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites'
             )),
         },
         {
@@ -223,13 +232,13 @@ def surveys_tab(request):
 
 
 def _capture_gnss_snapshot():
-    """Reads the current phone GNSS fix from Redis and saves a GNSSMeasurement."""
-    from data_cube.models import GNSSMeasurement
+    """Reads the current phone GNSS fix from Redis and saves a GNSSPhoneMeasurement."""
+    from data_cube.models import GNSSPhoneMeasurement
     raw = r.get('gnss_phone')
     if raw:
         try:
             fix = json.loads(raw)
-            return GNSSMeasurement.objects.create(
+            return GNSSPhoneMeasurement.objects.create(
                 latitude=fix.get('lat', 0.0),
                 longitude=fix.get('lon', 0.0),
                 altitude=fix.get('alt', 0.0),
@@ -252,6 +261,7 @@ def api_latest_sensors(request):
         "aqi": 0, "eco2": 0, "tvoc": 0, 
         "ang": [0,0,0], "acc": [0,0,0],
         "lat": 0.0, "lon": 0.0, "alt": 0, "sats": 0, "accuracy": 0.0,
+        "sensor_lat": 0.0, "sensor_lon": 0.0, "sensor_alt": 0, "sensor_sats": 0,
         "pm1": 999, "pm25": 999, "pm10": 999,
         "noise": 0
     })

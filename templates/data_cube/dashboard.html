@@ -61,8 +61,8 @@
         <div class="col-md-4">
             <div class="pace-card h-100 p-4">
                 <div class="pace-section-title">
-                    <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-geo-alt-fill"></i></div>
-                    Position
+                    <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-phone"></i></div>
+                    GNSS Phone
                 </div>
                 <div class="pace-data-row">
                     <span class="label">Latitude</span>
@@ -83,7 +83,36 @@
                 <div style="height: 100px;">
                     <canvas id="satsChart"></canvas>
                 </div>
-                <small class="text-center text-muted mt-1 d-block">Position Accuracy (m)</small>
+                <small class="text-center text-muted mt-1 d-block">Phone Accuracy (m)</small>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-lavender"><i class="bi bi-broadcast-pin"></i></div>
+                    GNSS Sensor
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Latitude</span>
+                    <span class="value font-monospace" id="sensor_lat">--</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Longitude</span>
+                    <span class="value font-monospace" id="sensor_lon">--</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Altitude</span>
+                    <span class="value font-monospace"><span id="sensor_alt">--</span> m</span>
+                </div>
+                <div class="pace-data-row">
+                    <span class="label">Satellites</span>
+                    <span class="value font-monospace" id="sensor_sats">--</span>
+                </div>
+                <div style="height: 100px;">
+                    <canvas id="sensorSatsChart"></canvas>
+                </div>
+                <small class="text-center text-muted mt-1 d-block">Sensor Satellites</small>
             </div>
         </div>
     </div>
@@ -211,7 +240,7 @@
         options: chartOptions
     });
 
-    // 4. Accuracy Chart (replaces former Satellites chart)
+    // 4. Phone Accuracy Chart
     const satsChart = new Chart(document.getElementById('satsChart'), {
         type: 'line',
         data: {
@@ -228,6 +257,26 @@
         options: {
             ...chartOptions,
             scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 50, reverse: true } }
+        }
+    });
+
+    // 4b. Sensor Satellites Chart
+    const sensorSatsChart = new Chart(document.getElementById('sensorSatsChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [{ 
+                label: 'Satellites', 
+                borderColor: '#B19CD9',
+                backgroundColor: 'rgba(177, 156, 217, 0.1)', 
+                data: [], 
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            ...chartOptions,
+            scales: { x: { display: false }, y: { beginAtZero: true, suggestedMax: 12 } }
         }
     });
 
@@ -270,11 +319,17 @@
                 document.getElementById('co2').innerText = data.eco2;
                 document.getElementById('tvoc').innerText = data.tvoc;
                 
-                // Position
+                // Position (Phone)
                 document.getElementById('lat').innerText = data.lat.toFixed(6);
                 document.getElementById('lon').innerText = data.lon.toFixed(6);
                 document.getElementById('alt').innerText = data.alt.toFixed(1);
                 document.getElementById('acc').innerText = (data.accuracy || 0).toFixed(1);
+
+                // Position (Sensor SAM-M10Q)
+                document.getElementById('sensor_lat').innerText = (data.sensor_lat || 0).toFixed(6);
+                document.getElementById('sensor_lon').innerText = (data.sensor_lon || 0).toFixed(6);
+                document.getElementById('sensor_alt').innerText = (data.sensor_alt || 0).toFixed(1);
+                document.getElementById('sensor_sats').innerText = data.sensor_sats || 0;
 
                 // Acceleration Text
                 // document.getElementById('accX').innerText = data.acc[0].toFixed(0);
@@ -300,6 +355,7 @@
                 updateCharts(gyroChart, [data.ang[0], data.ang[1], data.ang[2]]);
                 updateCharts(noiseChart, [realNoise]);
                 updateCharts(satsChart, [data.accuracy || 0]);
+                updateCharts(sensorSatsChart, [data.sensor_sats || 0]);
                 updateCharts(pmChart, [data.pm1, data.pm25, data.pm10]);
 
                 // --- Styling Logic ---
