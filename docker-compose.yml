@@ -57,8 +57,8 @@ services:
     volumes:
       - .:/code
       - ./data/media:/code/media
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     depends_on:
       - db
       - redis
