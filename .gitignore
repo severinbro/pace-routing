@@ -5,3 +5,4 @@ data/maps
 data/pgadmin_data
 data/postgres
 examples
+nginx/certs

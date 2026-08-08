@@ -26,7 +26,12 @@ SECRET_KEY = 'django-insecure-g=ojz27zc65x09d2+fn)zc%zt(7%r)vs(_2!=@v&n=e8klatjy
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*'] 
+ALLOWED_HOSTS = ['*']
+
+# Trust the nginx proxy's X-Forwarded-Proto header so Django knows
+# it's being served over HTTPS (required for secure cookies, CSRF, etc.)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 
 
 # Application definition

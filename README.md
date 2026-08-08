@@ -79,7 +79,19 @@ cd pace-routing
 
 2. To use the map in the field without the internet, you must download the OpenStreetMap data for your target region and name it region.osm.pbf (e.g. download from [Geofabrik](https://www.geofabrik.de/)). Place this file directly into the ./data/maps/ directory in the project root. The container's internal map creation process will parse this data upon startup.
 
-### 4. Launch the System
+### 4. Generate the TLS Certificate
+
+The browser's Geolocation API (used to push the admin phone's GPS coordinates to the Pi) requires HTTPS. A self-signed certificate is generated for the Pi's hotspot:
+
+```bash
+bash generate_cert.sh
+```
+
+This creates `nginx/certs/pace.crt` and `nginx/certs/pace.key`. The certificate is valid for 10 years and covers the IP `10.42.0.1`.
+
+> **Note:** On first visit, the phone's browser will show a "Your connection is not private" warning. Tap **Advanced → Proceed to 10.42.0.1 (unsafe)**. This is normal for self-signed certs on a private network — you only need to do this once per browser.
+
+### 5. Launch the System
 
 Build and start the Docker containers. The `privileged: true` flag and device mappings in the compose file will automatically pass the I2C buses and USB microphone into the containers.
 
@@ -88,6 +100,16 @@ docker compose up --build -d
 
 ```
 
-The app will now be available on any device connected to the Pi's hotspot at `http://<pi-ip-address>:8000`.
+The app will now be available on any device connected to the Pi's hotspot at **`https://10.42.0.1`** (HTTPS, port 443 — the default). HTTP requests are automatically redirected to HTTPS.
 
-Per default, the participant is directed to the surveys page only. Tabs displaying the dashboard and map are invisible at first. To access those, navigate to `http://<pi-ip-address>:8000/dashboard` and `http://<pi-ip-address>:8000/map`, respectively.
+Per default, the participant is directed to the survey page. Tabs displaying the dashboard, map, and data browser are invisible at first. To access those, sign in with an admin account.
+
+### 6. GNSS & System Time
+
+When an admin signs in on their smartphone, the browser continuously pushes the phone's GPS coordinates to the Pi via the Geolocation API. These coordinates are used for:
+
+- Live position on the map
+- GNSS snapshots attached to survey responses
+- Synchronizing the Pi's system clock (the admin phone's GPS time is authoritative)
+
+Only the admin phone provides GNSS data — participant phones do not interfere.
