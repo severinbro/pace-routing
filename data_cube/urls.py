@@ -9,6 +9,7 @@ urlpatterns = [
     path('survey/done/', views.surveys_tab_done, name='surveys_tab_done'),
     path('map/', views.map_tab, name='map_tab'),
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
+    path('api/toggle-collect-mode/', views.toggle_collect_mode, name='toggle_collect_mode'),
     path('data-browser/', views.data_browser, name='data_browser'),
     path('export-gpkg/', views.export_gpkg, name='export_gpkg'),
     path('export-survey-json/', views.export_survey_json, name='export_survey_json'),

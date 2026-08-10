@@ -27,6 +27,18 @@
         <a href="{% url 'export_survey_json' %}" class="btn btn-pace-mint ms-2">
             <i class="bi bi-file-earmark-text-fill"></i> Export Survey Data (JSON)
         </a>
+
+        <!-- Collection Mode Toggle -->
+        <div class="d-inline-flex align-items-center gap-2 ms-3 border-start border-3 ps-3">
+            <span class="fw-bold {% if collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-mode-label">
+                {% if collect_mode %}Recording{% else %}Paused{% endif %}
+            </span>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" role="switch" id="collect-mode-switch"
+                       style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
+                       {% if collect_mode %}checked{% endif %}>
+            </div>
+        </div>
     </div>
 
     <!-- Tabs -->
@@ -89,5 +101,30 @@
         });
         clickedBtn.classList.add('active');
     }
+
+    // --- Collection Mode Toggle ---
+    const collectSwitch = document.getElementById('collect-mode-switch');
+    const collectLabel = document.getElementById('collect-mode-label');
+    collectSwitch.addEventListener('change', function() {
+        const active = collectSwitch.checked;
+        const csrfToken = document.getElementById('csrf-token').value;
+        fetch('{% url "toggle_collect_mode" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'active=' + (active ? '1' : '0'),
+        })
+        .then(res => res.json())
+        .then(data => {
+            collectLabel.textContent = data.collect_mode ? 'Recording' : 'Paused';
+            collectLabel.className = 'fw-bold ' + (data.collect_mode ? 'text-success' : 'text-muted');
+        })
+        .catch(err => {
+            console.error('Error toggling collection mode:', err);
+            collectSwitch.checked = !active;
+        });
+    });
 </script>
 {% endblock %}

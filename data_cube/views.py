@@ -60,6 +60,22 @@ def dashboard_tab(request):
     """Renders the live sensor telemetry grid."""
     return render(request, 'data_cube/dashboard.html')
 
+@staff_member_required(login_url='admin_login')
+def toggle_collect_mode(request):
+    """Toggles active sensor-data collection on/off (stored in Redis).
+
+    The db_writer container checks the "collect_mode" key before persisting
+    each reading; when off, messages are consumed and discarded.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    active = request.POST.get('active') == '1'
+    if active:
+        r.set('collect_mode', '1')
+    else:
+        r.delete('collect_mode')
+    return JsonResponse({'collect_mode': active})
+
 # --- ADMIN-ONLY: DATA BROWSER ---
 @staff_member_required(login_url='admin_login')
 def data_browser(request):
@@ -140,7 +156,11 @@ def data_browser(request):
         },
     ]
 
-    return render(request, 'data_cube/data_browser.html', {'tables': tables})
+    collect_mode = r.get('collect_mode') == b'1'
+    return render(request, 'data_cube/data_browser.html', {
+        'tables': tables,
+        'collect_mode': collect_mode,
+    })
 
 # --- ADMIN-ONLY: GPKG EXPORT ---
 @staff_member_required(login_url='admin_login')
