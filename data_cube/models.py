@@ -89,3 +89,7 @@ class EnvironmentSurvey(models.Model):
 
     # Foreign keys to link a survey to the exact sensor state at that moment
     gnss_snapshot = models.OneToOneField(GNSSPhoneMeasurement, on_delete=models.CASCADE, null=True)
+
+    # Which campaign stop this survey belongs to (1-based index, set when
+    # the admin unlocks the stop and the participant submits the survey).
+    campaign_stop = models.IntegerField(null=True, blank=True)

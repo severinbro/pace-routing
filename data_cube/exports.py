@@ -19,7 +19,6 @@ from shapely.geometry import Point
 
 from .models import (
     GNSSPhoneMeasurement,
-    GNSSSensorMeasurement,
     AtmosphericMeasurement,
     AccelerometerMeasurement,
     AirQualityMeasurement,
@@ -49,14 +48,9 @@ def build_sensor_geodataframe():
             crs='EPSG:4326',
         )
 
-    # GNSSSensorMeasurement shares column names (latitude, longitude, altitude,
-    # satellites, timestamp) with GNSSPhoneMeasurement, so select them with their
-    # real field names and rename in pandas with a "sensor_" prefix to avoid
-    # collisions after the merge.
+    # Only non-GNSS sensor tables are joined onto the phone GNSS base table.
+    # The GNSS sensor (SAM-M10Q) measurements are excluded from the GPKG export.
     joins = [
-        (GNSSSensorMeasurement,
-         ['latitude', 'longitude', 'altitude', 'satellites'],
-         ['sensor_lat', 'sensor_lon', 'sensor_alt', 'sensor_sats']),
         (AtmosphericMeasurement, ['temperature', 'humidity', 'pressure'], None),
         (AccelerometerMeasurement, ['accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ'], None),
         (AirQualityMeasurement, ['aqi', 'tvoc', 'eco2'], None),
@@ -127,6 +121,7 @@ def build_survey_json():
             'survey_id': s.id,
             'timestamp': s.timestamp.isoformat() if s.timestamp else None,
             'username': s.user.username if s.user else None,
+            'campaign_stop': s.campaign_stop,
             'responses': {
                 'q1': s.q1, 'q2': s.q2, 'q3': s.q3, 'q4': s.q4,
                 'q5': s.q5, 'q6': s.q6, 'q7': s.q7,

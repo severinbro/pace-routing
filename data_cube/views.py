@@ -32,7 +32,7 @@ def campaign_state():
         'active': active,
         'total_stops': total,
         'current_stop': current,
-        'collect_mode': r.get('campaign:collect_mode') == b'1',
+        'collect_mode': r.get('collect_mode') == b'1',
     }
 
 
@@ -62,10 +62,11 @@ def dashboard_tab(request):
 
 @staff_member_required(login_url='admin_login')
 def toggle_collect_mode(request):
-    """Toggles active sensor-data collection on/off (stored in Redis).
+    """Toggles sensor-data collection on/off (stored in Redis).
 
-    The db_writer container checks the "collect_mode" key before persisting
-    each reading; when off, messages are consumed and discarded.
+    This controls ONLY sensor measurement storage — survey submissions are
+    unaffected. The db_writer container checks the "collect_mode" key before
+    persisting each reading; when off, messages are consumed and discarded.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -147,20 +148,16 @@ def data_browser(request):
         {
             'key': 'surveys',
             'label': 'Surveys',
-            'columns': ['ID', 'Timestamp', 'User', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11', 'GNSS ID'],
+            'columns': ['ID', 'Timestamp', 'User', 'Stop', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q10', 'Q11', 'GNSS ID'],
             'rows': list(EnvironmentSurvey.objects.order_by('-id')[:200].values_list(
-                'id', 'timestamp', 'user__username',
+                'id', 'timestamp', 'user__username', 'campaign_stop',
                 'q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7',
                 'q8', 'q9', 'q10', 'q11', 'gnss_snapshot_id'
             )),
         },
     ]
 
-    collect_mode = r.get('collect_mode') == b'1'
-    return render(request, 'data_cube/data_browser.html', {
-        'tables': tables,
-        'collect_mode': collect_mode,
-    })
+    return render(request, 'data_cube/data_browser.html', {'tables': tables})
 
 # --- ADMIN-ONLY: GPKG EXPORT ---
 @staff_member_required(login_url='admin_login')
@@ -229,7 +226,8 @@ def campaign_start(request):
     r.set('campaign:active', '1')
     r.set('campaign:total_stops', total_stops)
     r.set('campaign:current_stop', 0)  # no stop unlocked yet
-    r.set('campaign:collect_mode', '1')  # start collecting sensor data
+    r.set('collect_mode', '1')  # start collecting sensor data
+    r.set('campaign:collect_mode', '1')  # mirror for campaign hub display
     return JsonResponse(campaign_state())
 
 @staff_member_required(login_url='admin_login')
@@ -238,7 +236,7 @@ def campaign_abort(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     r.delete('campaign:active', 'campaign:total_stops', 'campaign:current_stop',
-             'campaign:collect_mode')
+             'campaign:collect_mode', 'collect_mode')
     return JsonResponse({'active': False})
 
 @staff_member_required(login_url='admin_login')
@@ -257,13 +255,19 @@ def campaign_unlock_stop(request):
 
 @staff_member_required(login_url='admin_login')
 def campaign_toggle_collect(request):
-    """Toggles sensor data collection on/off during a campaign."""
+    """Toggles sensor data collection on/off during a campaign.
+
+    Sets both the standalone "collect_mode" key (checked by the db_writer)
+    and the "campaign:collect_mode" mirror (for the campaign hub display).
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     active = request.POST.get('active') == '1'
     if active:
+        r.set('collect_mode', '1')
         r.set('campaign:collect_mode', '1')
     else:
+        r.delete('collect_mode')
         r.delete('campaign:collect_mode')
     return JsonResponse({'collect_mode': active})
 
@@ -362,19 +366,27 @@ def surveys_tab(request):
             q10=int(request.POST.get('q10')),
             q11=int(request.POST.get('q11')),
             gnss_snapshot=gnss_snapshot,
+            campaign_stop=state['current_stop'],
         )
         return redirect('surveys_tab_done')
 
     submitted = request.GET.get('done') == '1'
     campaign_complete_flag = request.GET.get('complete') == '1'
+    force_waiting = request.GET.get('waiting') == '1'
 
     # Determine which screen to show:
     #   - campaign complete (all stops done)
-    #   - waiting (no stop unlocked yet)
+    #   - waiting (no stop unlocked yet, or participant already submitted this stop)
     #   - survey form (stop unlocked)
     campaign_complete = (campaign_complete_flag or
                          (state['active'] and state['current_stop'] >= state['total_stops'] and state['total_stops'] > 0))
-    waiting = not state['active'] or state['current_stop'] == 0
+    # The thank-you "Next" button passes waiting=1 so the participant sees the
+    # waiting screen instead of the same survey form again. The admin must
+    # unlock the next stop before the form reappears.
+    if force_waiting:
+        waiting = True
+    else:
+        waiting = not state['active'] or state['current_stop'] == 0
 
     return render(request, 'data_cube/survey_environment.html', {
         'phase1_features': phase1_features,

@@ -59,6 +59,27 @@
         </form>
     </div>
 
+    <!-- Data Collection Toggle (always available) -->
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-record-circle"></i></div>
+            Sensor Data Collection
+        </div>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <p class="text-muted small mb-0">Toggle whether sensor readings are saved to the database.</p>
+            <div class="d-inline-flex align-items-center gap-2">
+                <span class="fw-bold {% if campaign.collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-label">
+                    {% if campaign.collect_mode %}Recording{% else %}Paused{% endif %}
+                </span>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="collect-switch"
+                           style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
+                           {% if campaign.collect_mode %}checked{% endif %}>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Active Campaign Controls -->
     <div class="pace-card p-4 mb-4" id="controls-card" {% if not campaign.active %}style="display: none;"{% endif %}>
         <div class="pace-section-title">
@@ -79,24 +100,6 @@
         </div>
 
         <hr>
-
-        <!-- Data collection toggle -->
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-            <div>
-                <label class="form-label mb-0">Sensor Data Collection</label>
-                <p class="text-muted small mb-0">Toggle whether sensor readings are saved to the database.</p>
-            </div>
-            <div class="d-inline-flex align-items-center gap-2">
-                <span class="fw-bold {% if campaign.collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-label">
-                    {% if campaign.collect_mode %}Recording{% else %}Paused{% endif %}
-                </span>
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="collect-switch"
-                           style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
-                           {% if campaign.collect_mode %}checked{% endif %}>
-                </div>
-            </div>
-        </div>
 
         <hr>
 
@@ -137,13 +140,14 @@
                     if (allDone) {
                         document.getElementById('unlock-btn').innerHTML = '<i class="bi bi-check-circle-fill"></i> All Stops Unlocked';
                     }
-
-                    const collectSwitch = document.getElementById('collect-switch');
-                    collectSwitch.checked = state.collect_mode;
-                    const collectLabel = document.getElementById('collect-label');
-                    collectLabel.textContent = state.collect_mode ? 'Recording' : 'Paused';
-                    collectLabel.className = 'fw-bold ' + (state.collect_mode ? 'text-success' : 'text-muted');
                 }
+
+                // Always update the collection toggle (it's independent of campaign state).
+                const collectSwitch = document.getElementById('collect-switch');
+                collectSwitch.checked = state.collect_mode;
+                const collectLabel = document.getElementById('collect-label');
+                collectLabel.textContent = state.collect_mode ? 'Recording' : 'Paused';
+                collectLabel.className = 'fw-bold ' + (state.collect_mode ? 'text-success' : 'text-muted');
             })
             .catch(err => console.error('Status refresh failed:', err));
     }
@@ -211,7 +215,8 @@
         .catch(err => console.error('Abort failed:', err));
     });
 
-    // Poll for status updates every 3 seconds
-    setInterval(refreshStatus, 3000);
+    // Poll for status updates every 2 seconds, and refresh immediately on load.
+    refreshStatus();
+    setInterval(refreshStatus, 2000);
 </script>
 {% endblock %}
