@@ -25,6 +25,9 @@
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'dashboard_tab' %}active{% endif %}" href="{% url 'dashboard_tab' %}">
                     <i class="bi bi-clipboard-data"></i>
                 </a>
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' %}active{% endif %}" href="{% url 'campaign_hub' %}">
+                    <i class="bi bi-clipboard2-data-fill"></i>
+                </a>
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'data_browser' %}active{% endif %}" href="{% url 'data_browser' %}">
                     <i class="bi bi-database-fill"></i>
                 </a>
@@ -32,6 +35,10 @@
                     <i class="bi bi-person-plus-fill"></i>
                 </a>
             {% endif %}
+
+            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}">
+                <i class="bi bi-info-circle"></i>
+            </a>
 
             <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}">
                 <i class="bi bi-clipboard-check"></i>
@@ -53,12 +60,12 @@
         </div>
     </nav>
 
+    <!-- Hidden CSRF token for JS fetch calls (must be before content block) -->
+    <input type="hidden" id="csrf-token" value="{{ csrf_token }}">
+
     <main class="container-fluid mt-3">
         {% block content %}{% endblock %}
     </main>
-
-    <!-- Hidden CSRF token for JS fetch calls -->
-    <input type="hidden" id="csrf-token" value="{{ csrf_token }}">
 
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/leaflet.js' %}"></script>

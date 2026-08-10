@@ -15,6 +15,27 @@ logger = logging.getLogger(__name__)
 r = redis.Redis(host='redis', port=6379, db=0)
 
 
+# --- CAMPAIGN STATE HELPERS (stored in Redis) ---
+# Campaign state is kept in Redis so both the web container and the
+# db_writer/sensor worker can read it without hitting the database.
+# Keys:
+#   campaign:active      -> '1' when a campaign is running
+#   campaign:total_stops -> total number of survey stops (int)
+#   campaign:current_stop -> index of the currently unlocked stop (1-based)
+#   campaign:collect_mode -> '1' when sensor data should be persisted
+def campaign_state():
+    """Returns a dict describing the current campaign state."""
+    active = r.get('campaign:active') == b'1'
+    total = int(r.get('campaign:total_stops') or 0)
+    current = int(r.get('campaign:current_stop') or 0)
+    return {
+        'active': active,
+        'total_stops': total,
+        'current_stop': current,
+        'collect_mode': r.get('campaign:collect_mode') == b'1',
+    }
+
+
 # --- CUSTOM LOGIN (role-based redirect) ---
 class RoleLoginView(LoginView):
     """Redirects admin users to admin_home, non-admin users to surveys_tab."""
@@ -24,7 +45,7 @@ class RoleLoginView(LoginView):
         user = self.request.user
         if user.is_staff:
             return reverse('admin_home')
-        return reverse('surveys_tab')
+        return reverse('about')
 
 
 # --- ADMIN-ONLY: MAP ---
@@ -167,6 +188,70 @@ def admin_home(request):
     """Renders the admin landing page with links to Dashboard, Map and Data."""
     return render(request, 'data_cube/admin_home.html')
 
+# --- ADMIN-ONLY: CAMPAIGN HUB ---
+@staff_member_required(login_url='admin_login')
+def campaign_hub(request):
+    """Renders the campaign management dashboard for admins."""
+    return render(request, 'data_cube/campaign_hub.html', campaign_state())
+
+@staff_member_required(login_url='admin_login')
+def campaign_start(request):
+    """Starts a new measurement campaign with a given number of stops."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        total_stops = int(request.POST.get('total_stops', 0))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Invalid number'}, status=400)
+    if total_stops < 1:
+        return JsonResponse({'error': 'At least 1 stop required'}, status=400)
+
+    r.set('campaign:active', '1')
+    r.set('campaign:total_stops', total_stops)
+    r.set('campaign:current_stop', 0)  # no stop unlocked yet
+    r.set('campaign:collect_mode', '1')  # start collecting sensor data
+    return JsonResponse(campaign_state())
+
+@staff_member_required(login_url='admin_login')
+def campaign_abort(request):
+    """Aborts the active campaign and stops data collection."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    r.delete('campaign:active', 'campaign:total_stops', 'campaign:current_stop',
+             'campaign:collect_mode')
+    return JsonResponse({'active': False})
+
+@staff_member_required(login_url='admin_login')
+def campaign_unlock_stop(request):
+    """Unlocks the next survey stop for participants."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    state = campaign_state()
+    if not state['active']:
+        return JsonResponse({'error': 'No active campaign'}, status=400)
+    next_stop = state['current_stop'] + 1
+    if next_stop > state['total_stops']:
+        return JsonResponse({'error': 'All stops already unlocked'}, status=400)
+    r.set('campaign:current_stop', next_stop)
+    return JsonResponse(campaign_state())
+
+@staff_member_required(login_url='admin_login')
+def campaign_toggle_collect(request):
+    """Toggles sensor data collection on/off during a campaign."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    active = request.POST.get('active') == '1'
+    if active:
+        r.set('campaign:collect_mode', '1')
+    else:
+        r.delete('campaign:collect_mode')
+    return JsonResponse({'collect_mode': active})
+
+@staff_member_required(login_url='admin_login')
+def campaign_status(request):
+    """Returns the current campaign state as JSON (for AJAX polling)."""
+    return JsonResponse(campaign_state())
+
 # --- ADMIN-ONLY: CREATE NON-ADMIN USER ---
 @staff_member_required(login_url='admin_login')
 def create_user(request):
@@ -196,15 +281,25 @@ def sign_up(request):
             user.is_staff = False
             user.save()
             login(request, user)
-            return redirect('surveys_tab')
+            return redirect('about')
     else:
         form = UserCreationForm()
     return render(request, 'data_cube/sign_up.html', {'form': form})
 
+# --- PUBLIC: ABOUT / PROJECT INFO ---
+def about(request):
+    """Renders the project info landing page (visible to everyone)."""
+    return render(request, 'data_cube/about.html')
+
 # --- SURVEY (the single survey page, served at the root URL) ---
 @login_required(login_url='admin_login')
 def surveys_tab(request):
-    """Renders the environmental survey directly at the root URL."""
+    """Renders the environmental survey, gated by the campaign state.
+
+    - No active campaign or no stop unlocked: shows a 'waiting' screen.
+    - Stop unlocked: shows the survey form.
+    - All stops completed: shows a 'campaign complete' screen.
+    """
     from data_cube.models import EnvironmentSurvey
 
     # Phase 1: Environmental features (q1-q7)
@@ -228,8 +323,13 @@ def surveys_tab(request):
          "low": "Not Stressed", "high": "Very Stressed"},
     ]
 
+    state = campaign_state()
+
     if request.method == 'POST':
-        # Capture the current GNSS fix from Redis
+        # Only accept survey submissions when a stop is unlocked.
+        if not state['active'] or state['current_stop'] == 0:
+            return redirect('surveys_tab')
+
         gnss_snapshot = _capture_gnss_snapshot()
 
         EnvironmentSurvey.objects.create(
@@ -246,10 +346,23 @@ def surveys_tab(request):
         return redirect('surveys_tab_done')
 
     submitted = request.GET.get('done') == '1'
+    campaign_complete_flag = request.GET.get('complete') == '1'
+
+    # Determine which screen to show:
+    #   - campaign complete (all stops done)
+    #   - waiting (no stop unlocked yet)
+    #   - survey form (stop unlocked)
+    campaign_complete = (campaign_complete_flag or
+                         (state['active'] and state['current_stop'] >= state['total_stops'] and state['total_stops'] > 0))
+    waiting = not state['active'] or state['current_stop'] == 0
+
     return render(request, 'data_cube/survey_environment.html', {
         'phase1_features': phase1_features,
         'phase2_questions': phase2_questions,
         'submitted': submitted,
+        'campaign': state,
+        'campaign_complete': campaign_complete,
+        'waiting': waiting,
     })
 
 
@@ -257,7 +370,11 @@ def surveys_tab(request):
 def surveys_tab_done(request):
     """Shows the thank-you confirmation after a survey submission."""
     from django.urls import reverse
-    return redirect(reverse('surveys_tab') + '?done=1')
+    state = campaign_state()
+    campaign_complete = (state['active'] and
+                         state['current_stop'] >= state['total_stops'] and
+                         state['total_stops'] > 0)
+    return redirect(reverse('surveys_tab') + '?done=1&complete=' + ('1' if campaign_complete else '0'))
 
 
 def _capture_gnss_snapshot():

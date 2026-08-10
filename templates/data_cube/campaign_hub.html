@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-coral mx-auto mb-3">
+            <i class="bi bi-clipboard2-data-fill"></i>
+        </div>
+        <h2 class="fw-bold">Campaign Hub</h2>
+        <p class="text-muted">Configure and control measurement field campaigns.</p>
+    </div>
+
+    <!-- Campaign Status -->
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-activity"></i></div>
+            Current Status
+        </div>
+        <div id="campaign-status-area">
+            {% if campaign.active %}
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <span class="pace-badge" style="background: var(--pace-mint); color: var(--pace-ink);">
+                    <i class="bi bi-record-circle"></i> Active
+                </span>
+                <span class="fw-bold">Stop <span id="current-stop">{{ campaign.current_stop }}</span> / <span id="total-stops">{{ campaign.total_stops }}</span></span>
+                <div class="flex-grow-1">
+                    <div class="progress" style="height: 24px; border: 2px solid var(--pace-border);">
+                        <div class="progress-bar" id="campaign-progress" role="progressbar"
+                             style="background: var(--pace-coral); width: {% widthratio campaign.current_stop campaign.total_stops 100 %}%;"></div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No active campaign. Configure a new one below.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Start New Campaign -->
+    <div class="pace-card p-4 mb-4" id="start-card">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-play-circle-fill"></i></div>
+            Start New Campaign
+        </div>
+        <p class="text-muted mb-3">
+            Define the number of survey stops along the walking route. Sensor data
+            collection starts automatically when the campaign begins.
+        </p>
+        <form id="start-form" class="d-flex align-items-end gap-3 flex-wrap">
+            <div>
+                <label class="form-label mb-1" for="total-stops-input">Number of Stops</label>
+                <input type="number" class="form-control" id="total-stops-input" name="total_stops"
+                       min="1" max="50" value="5" style="width: 120px;">
+            </div>
+            <button type="submit" class="btn btn-pace-primary btn-lg">
+                <i class="bi bi-play-fill"></i> Start Campaign
+            </button>
+        </form>
+    </div>
+
+    <!-- Active Campaign Controls -->
+    <div class="pace-card p-4 mb-4" id="controls-card" {% if not campaign.active %}style="display: none;"{% endif %}>
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-sliders"></i></div>
+            Campaign Controls
+        </div>
+
+        <!-- Unlock next stop -->
+        <div class="mb-3">
+            <label class="form-label">Unlock Next Survey Stop</label>
+            <p class="text-muted small">
+                Unlocks the next survey for participants. They will see the survey
+                form instead of the waiting screen.
+            </p>
+            <button type="button" class="btn btn-pace-mint btn-lg" id="unlock-btn">
+                <i class="bi bi-unlock-fill"></i> Unlock Stop <span id="next-stop-num">{{ campaign.current_stop|add:1 }}</span>
+            </button>
+        </div>
+
+        <hr>
+
+        <!-- Data collection toggle -->
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+            <div>
+                <label class="form-label mb-0">Sensor Data Collection</label>
+                <p class="text-muted small mb-0">Toggle whether sensor readings are saved to the database.</p>
+            </div>
+            <div class="d-inline-flex align-items-center gap-2">
+                <span class="fw-bold {% if campaign.collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-label">
+                    {% if campaign.collect_mode %}Recording{% else %}Paused{% endif %}
+                </span>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="collect-switch"
+                           style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
+                           {% if campaign.collect_mode %}checked{% endif %}>
+                </div>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Abort campaign -->
+        <div>
+            <label class="form-label text-danger">Abort Campaign</label>
+            <p class="text-muted small">
+                Immediately stops the campaign and data collection. Participants
+                will return to the waiting screen.
+            </p>
+            <button type="button" class="btn btn-outline-danger btn-lg" id="abort-btn">
+                <i class="bi bi-x-circle-fill"></i> Abort Campaign
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const csrfToken = document.getElementById('csrf-token').value;
+
+    function refreshStatus() {
+        fetch('{% url "campaign_status" %}')
+            .then(res => res.json())
+            .then(state => {
+                const active = state.active;
+                document.getElementById('controls-card').style.display = active ? 'block' : 'none';
+                document.getElementById('start-card').style.display = active ? 'none' : 'block';
+
+                if (active) {
+                    document.getElementById('current-stop').textContent = state.current_stop;
+                    document.getElementById('total-stops').textContent = state.total_stops;
+                    const pct = state.total_stops > 0 ? (state.current_stop / state.total_stops * 100) : 0;
+                    document.getElementById('campaign-progress').style.width = pct + '%';
+                    document.getElementById('next-stop-num').textContent = state.current_stop + 1;
+
+                    const allDone = state.current_stop >= state.total_stops;
+                    document.getElementById('unlock-btn').disabled = allDone;
+                    if (allDone) {
+                        document.getElementById('unlock-btn').innerHTML = '<i class="bi bi-check-circle-fill"></i> All Stops Unlocked';
+                    }
+
+                    const collectSwitch = document.getElementById('collect-switch');
+                    collectSwitch.checked = state.collect_mode;
+                    const collectLabel = document.getElementById('collect-label');
+                    collectLabel.textContent = state.collect_mode ? 'Recording' : 'Paused';
+                    collectLabel.className = 'fw-bold ' + (state.collect_mode ? 'text-success' : 'text-muted');
+                }
+            })
+            .catch(err => console.error('Status refresh failed:', err));
+    }
+
+    // Start campaign
+    document.getElementById('start-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const total = document.getElementById('total-stops-input').value;
+        fetch('{% url "campaign_start" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'total_stops=' + total,
+        })
+        .then(res => res.json())
+        .then(() => refreshStatus())
+        .catch(err => console.error('Start failed:', err));
+    });
+
+    // Unlock next stop
+    document.getElementById('unlock-btn').addEventListener('click', function() {
+        fetch('{% url "campaign_unlock_stop" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(res => res.json())
+        .then(() => refreshStatus())
+        .catch(err => console.error('Unlock failed:', err));
+    });
+
+    // Toggle data collection
+    document.getElementById('collect-switch').addEventListener('change', function() {
+        const active = this.checked;
+        fetch('{% url "campaign_toggle_collect" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'active=' + (active ? '1' : '0'),
+        })
+        .then(res => res.json())
+        .then(data => {
+            const label = document.getElementById('collect-label');
+            label.textContent = data.collect_mode ? 'Recording' : 'Paused';
+            label.className = 'fw-bold ' + (data.collect_mode ? 'text-success' : 'text-muted');
+        })
+        .catch(err => {
+            console.error('Toggle failed:', err);
+            this.checked = !active;
+        });
+    });
+
+    // Abort campaign
+    document.getElementById('abort-btn').addEventListener('click', function() {
+        if (!confirm('Abort the active campaign? This cannot be undone.')) return;
+        fetch('{% url "campaign_abort" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(res => res.json())
+        .then(() => refreshStatus())
+        .catch(err => console.error('Abort failed:', err));
+    });
+
+    // Poll for status updates every 3 seconds
+    setInterval(refreshStatus, 3000);
+</script>
+{% endblock %}

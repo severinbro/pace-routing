@@ -21,6 +21,11 @@ class Command(BaseCommand):
         while True:
             try:
                 queue_name, message = r.blpop('sensor_db_queue')
+                # Only persist to the database when collection mode is active.
+                # The campaign hub toggles this via the "campaign:collect_mode" key.
+                if r.get('campaign:collect_mode') != b'1':
+                    continue
+
                 data = json.loads(message.decode('utf-8'))
                 
                 # 1a. Save Phone GNSS

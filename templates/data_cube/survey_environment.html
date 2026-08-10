@@ -10,6 +10,70 @@
         <p class="text-muted">Rate each feature on a scale of 1 to 7.</p>
     </div>
 
+    {% if campaign_complete %}
+    <!-- ===== CAMPAIGN COMPLETE ===== -->
+    <div class="pace-card">
+        <div class="card-body p-5 text-center">
+            <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-4">
+                <i class="bi bi-award-fill"></i>
+            </div>
+            <h3 class="fw-bold mb-3">Thank you for your participation.</h3>
+            <p class="text-muted mb-4">This was the last survey of this campaign.</p>
+            <a href="{% url 'about' %}" class="btn btn-pace-primary btn-lg py-3 px-5">
+                <i class="bi bi-info-circle"></i> Back to About
+            </a>
+        </div>
+    </div>
+
+    {% elif waiting %}
+    <!-- ===== WAITING SCREEN ===== -->
+    <div class="pace-card">
+        <div class="card-body p-5 text-center">
+            <div class="pace-icon-tile pace-icon-tile-sun mx-auto mb-4">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <h3 class="fw-bold mb-3">The next survey is starting soon...</h3>
+            <p class="text-muted mb-4">Please wait here until the next stop is reached.</p>
+
+            {% if campaign.active and campaign.total_stops > 0 %}
+            <!-- Campaign progress bar -->
+            <div class="mb-2">
+                <div class="d-flex justify-content-between text-muted small mb-1">
+                    <span>Survey Progress</span>
+                    <span>{{ campaign.current_stop }} / {{ campaign.total_stops }}</span>
+                </div>
+                <div class="progress" style="height: 24px; border: 2px solid var(--pace-border);">
+                    <div class="progress-bar" role="progressbar"
+                         style="background: var(--pace-coral); width: {% widthratio campaign.current_stop campaign.total_stops 100 %}%;"></div>
+                </div>
+            </div>
+            {% endif %}
+
+            <p class="text-muted small mt-4 mb-0">This page will update automatically.</p>
+        </div>
+    </div>
+    <script>
+        // Auto-refresh every 5 seconds so participants see the survey as soon as it's unlocked.
+        setTimeout(function() { window.location.reload(); }, 5000);
+    </script>
+
+    {% else %}
+    <!-- ===== ACTIVE SURVEY FORM ===== -->
+
+    <!-- Campaign progress indicator -->
+    {% if campaign.active and campaign.total_stops > 0 %}
+    <div class="mb-4">
+        <div class="d-flex justify-content-between text-muted small mb-1">
+            <span>Survey {{ campaign.current_stop }} of {{ campaign.total_stops }}</span>
+            <span>{{ campaign.current_stop }} / {{ campaign.total_stops }}</span>
+        </div>
+        <div class="progress" style="height: 20px; border: 2px solid var(--pace-border);">
+            <div class="progress-bar" role="progressbar"
+                 style="background: var(--pace-coral); width: {% widthratio campaign.current_stop campaign.total_stops 100 %}%;"></div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Progress indicator -->
     <div class="d-flex justify-content-center gap-2 mb-4">
         <span class="pace-badge" id="phase-dot-1" style="background: var(--pace-coral); color: #fff;">1</span>
@@ -130,14 +194,22 @@
                         <i class="bi bi-check-circle-fill"></i>
                     </div>
                     <h3 class="fw-bold mb-3">Thank you for participating.</h3>
+                    {% if campaign_complete %}
+                    <p class="text-muted mb-4">This was the last survey of this campaign.</p>
+                    <a href="{% url 'about' %}" class="btn btn-pace-primary btn-lg py-3 px-5">
+                        <i class="bi bi-info-circle"></i> Back to About
+                    </a>
+                    {% else %}
                     <p class="text-muted mb-4">Your responses have been recorded.</p>
                     <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary btn-lg py-3 px-5">
                         <i class="bi bi-arrow-right-circle-fill"></i> Next
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </form>
+    {% endif %}
 </div>
 
 <script>
@@ -166,7 +238,7 @@
     }
 
     // If the survey was just submitted, show the thank-you phase.
-    {% if submitted %}
+    {% if submitted and not waiting and not campaign_complete %}
     document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('phase-1').style.display = 'none';
         document.getElementById('phase-4').style.display = 'block';

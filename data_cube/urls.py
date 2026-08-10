@@ -12,6 +12,15 @@ urlpatterns = [
     path('data-browser/', views.data_browser, name='data_browser'),
     path('export-gpkg/', views.export_gpkg, name='export_gpkg'),
     path('export-survey-json/', views.export_survey_json, name='export_survey_json'),
+    path('about/', views.about, name='about'),
+
+    # --- CAMPAIGN MANAGEMENT (admin only) ---
+    path('campaign/', views.campaign_hub, name='campaign_hub'),
+    path('campaign/start/', views.campaign_start, name='campaign_start'),
+    path('campaign/abort/', views.campaign_abort, name='campaign_abort'),
+    path('campaign/unlock-stop/', views.campaign_unlock_stop, name='campaign_unlock_stop'),
+    path('campaign/toggle-collect/', views.campaign_toggle_collect, name='campaign_toggle_collect'),
+    path('campaign/status/', views.campaign_status, name='campaign_status'),
 
     # --- AUTH & LANDING ---
     # Custom login view redirects admin -> admin_home, non-admin -> surveys_tab

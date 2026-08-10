@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3">
+            <i class="bi bi-info-circle-fill"></i>
+        </div>
+        <h2 class="fw-bold">About the Project</h2>
+        <p class="text-muted">Environmental perception & sensor data collection.</p>
+    </div>
+
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-leaf-fill"></i></div>
+            What is PACE?
+        </div>
+        <p>
+            PACE (Perception and Comfort Evaluation) is a field-research platform that
+            combines objective environmental sensor measurements with subjective
+            human perception surveys. Participants walk along a predefined route,
+            stopping at designated points to rate their environmental experience.
+        </p>
+        <p class="mb-0">
+            Sensor data &mdash; including atmospheric conditions, air quality, noise
+            levels, particulate matter, motion, and GNSS positioning &mdash; is
+            collected continuously throughout the campaign and linked to each
+            survey response, enabling rich analysis of how physical environmental
+            factors relate to perceived comfort.
+        </p>
+    </div>
+
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-signpost-split-fill"></i></div>
+            How It Works
+        </div>
+        <ol class="mb-0">
+            <li class="mb-2"><strong>Walk</strong> &mdash; The group walks along a route while sensors record data continuously.</li>
+            <li class="mb-2"><strong>Stop</strong> &mdash; At each designated stop, the admin unlocks the survey for participants.</li>
+            <li class="mb-2"><strong>Survey</strong> &mdash; Participants rate environmental features, personal perception, and overall comfort on a 1&ndash;7 scale.</li>
+            <li class="mb-2"><strong>Continue</strong> &mdash; Walk to the next stop and repeat until the campaign is complete.</li>
+        </ol>
+    </div>
+
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-cpu-fill"></i></div>
+            Sensor Suite
+        </div>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <div class="pace-data-row"><span class="label">GNSS (Phone)</span><span class="value">Position & accuracy</span></div>
+                <div class="pace-data-row"><span class="label">GNSS (SAM-M10Q)</span><span class="value">Satellite positioning</span></div>
+                <div class="pace-data-row"><span class="label">BME280</span><span class="value">Temp, humidity, pressure</span></div>
+            </div>
+            <div class="col-md-6">
+                <div class="pace-data-row"><span class="label">ENS160</span><span class="value">Air quality (AQI, TVOC, eCO2)</span></div>
+                <div class="pace-data-row"><span class="label">PMSA003I</span><span class="value">Particulate matter (PM1/2.5/10)</span></div>
+                <div class="pace-data-row"><span class="label">LIS3DH + Mic</span><span class="value">Motion & noise levels</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center">
+        <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary btn-lg px-5">
+            <i class="bi bi-clipboard-check"></i> Go to Survey
+        </a>
+    </div>
+</div>
+{% endblock %}
