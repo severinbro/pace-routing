@@ -21,6 +21,11 @@ class Command(BaseCommand):
         while True:
             try:
                 queue_name, message = r.blpop('sensor_db_queue')
+                # Only persist to the database when collection mode is active.
+                # The dashboard toggles this via the "collect_mode" Redis key.
+                if r.get('collect_mode') != b'1':
+                    continue
+
                 data = json.loads(message.decode('utf-8'))
                 
                 # 1a. Save Phone GNSS
