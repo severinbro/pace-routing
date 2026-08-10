@@ -6,6 +6,7 @@ urlpatterns = [
     # --- TAB NAVIGATION ---
     # The empty path renders the environmental survey directly
     path('', views.surveys_tab, name='surveys_tab'),
+    path('survey/done/', views.surveys_tab_done, name='surveys_tab_done'),
     path('map/', views.map_tab, name='map_tab'),
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
     path('data-browser/', views.data_browser, name='data_browser'),

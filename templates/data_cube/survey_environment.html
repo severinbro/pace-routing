@@ -117,6 +117,26 @@
                 </button>
             </div>
         </div>
+
+        <!-- ===== PHASE 4: Thank You ===== -->
+        <div id="phase-4" style="display: none;">
+            <div class="text-center mb-3">
+                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Survey Complete</span>
+            </div>
+
+            <div class="pace-card mb-3">
+                <div class="card-body p-5 text-center">
+                    <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-4">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <h3 class="fw-bold mb-3">Thank you for participating.</h3>
+                    <p class="text-muted mb-4">Your responses have been recorded.</p>
+                    <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary btn-lg py-3 px-5">
+                        <i class="bi bi-arrow-right-circle-fill"></i> Next
+                    </a>
+                </div>
+            </div>
+        </div>
     </form>
 </div>
 
@@ -126,6 +146,7 @@
         document.getElementById('phase-1').style.display = 'none';
         document.getElementById('phase-2').style.display = 'none';
         document.getElementById('phase-3').style.display = 'none';
+        document.getElementById('phase-4').style.display = 'none';
         // Show the target phase
         document.getElementById('phase-' + n).style.display = 'block';
 
@@ -143,5 +164,20 @@
         // Scroll to top so the user sees the new phase from the beginning
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    // If the survey was just submitted, show the thank-you phase.
+    {% if submitted %}
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('phase-1').style.display = 'none';
+        document.getElementById('phase-4').style.display = 'block';
+        // Mark all progress dots as complete.
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById('phase-dot-' + i);
+            dot.style.background = 'var(--pace-coral)';
+            dot.style.color = '#fff';
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    {% endif %}
 </script>
 {% endblock %}

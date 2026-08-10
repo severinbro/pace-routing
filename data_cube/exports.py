@@ -49,22 +49,33 @@ def build_sensor_geodataframe():
             crs='EPSG:4326',
         )
 
+    # GNSSSensorMeasurement shares column names (latitude, longitude, altitude,
+    # satellites, timestamp) with GNSSPhoneMeasurement, so select them with their
+    # real field names and rename in pandas with a "sensor_" prefix to avoid
+    # collisions after the merge.
     joins = [
-        (GNSSSensorMeasurement, ['sensor_lat', 'sensor_lon', 'sensor_alt', 'sensor_sats']),
-        (AtmosphericMeasurement, ['temperature', 'humidity', 'pressure']),
-        (AccelerometerMeasurement, ['accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ']),
-        (AirQualityMeasurement, ['aqi', 'tvoc', 'eco2']),
-        (ParticulateMeasurement, ['pm1', 'pm25', 'pm10']),
-        (NoiseMeasurement, ['noise_db']),
+        (GNSSSensorMeasurement,
+         ['latitude', 'longitude', 'altitude', 'satellites'],
+         ['sensor_lat', 'sensor_lon', 'sensor_alt', 'sensor_sats']),
+        (AtmosphericMeasurement, ['temperature', 'humidity', 'pressure'], None),
+        (AccelerometerMeasurement, ['accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ'], None),
+        (AirQualityMeasurement, ['aqi', 'tvoc', 'eco2'], None),
+        (ParticulateMeasurement, ['pm1', 'pm25', 'pm10'], None),
+        (NoiseMeasurement, ['noise_db'], None),
     ]
 
     merged = gnss_df
-    for model, fields in joins:
+    for model, fields, rename_map in joins:
         df = pd.DataFrame.from_records(model.objects.values('id', *fields))
         if df.empty:
-            for field in fields:
+            for field in (rename_map or fields):
                 merged[field] = None
             continue
+        # Rename columns (e.g. sensor GNSS fields) before merge to avoid clashes.
+        if rename_map:
+            rename = dict(zip(['id'] + fields, ['id'] + rename_map))
+            df = df.rename(columns=rename)
+            fields = rename_map
         # Avoid duplicate/clashing "timestamp" columns from each table.
         merged = merged.merge(df, on='id', how='left', suffixes=('', f'_{model.__name__}'))
 

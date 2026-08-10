@@ -243,12 +243,21 @@ def surveys_tab(request):
             q11=int(request.POST.get('q11')),
             gnss_snapshot=gnss_snapshot,
         )
-        return redirect('surveys_tab')
+        return redirect('surveys_tab_done')
 
+    submitted = request.GET.get('done') == '1'
     return render(request, 'data_cube/survey_environment.html', {
         'phase1_features': phase1_features,
         'phase2_questions': phase2_questions,
+        'submitted': submitted,
     })
+
+
+@login_required(login_url='admin_login')
+def surveys_tab_done(request):
+    """Shows the thank-you confirmation after a survey submission."""
+    from django.urls import reverse
+    return redirect(reverse('surveys_tab') + '?done=1')
 
 
 def _capture_gnss_snapshot():

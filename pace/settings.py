@@ -33,8 +33,18 @@ ALLOWED_HOSTS = ['*']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 
-# Trust the Pi hotspot HTTPS origin for CSRF (nginx terminates TLS on :8000)
-CSRF_TRUSTED_ORIGINS = ['https://10.42.0.1:8000']
+# Trust the Pi hotspot HTTPS origin for CSRF (nginx terminates TLS on :443).
+# Port 8000 is only the internal Gunicorn socket; the browser's Origin header
+# uses the external nginx port (443, omitted as the HTTPS default), so the
+# trusted origin must NOT include :8000. Keep the :8000 variant only for
+# direct Gunicorn access during local debugging.
+CSRF_TRUSTED_ORIGINS = [
+    'https://10.42.0.1',
+    'https://10.42.0.1:8000',
+    'https://localhost:8000',
+    'https://localhost',
+    'http://localhost:8000',
+]
 
 
 # Application definition
