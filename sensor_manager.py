@@ -180,6 +180,10 @@ print("Pace Sensor Worker Running...")
 
 loop_count = 0
 
+# Accumulators for 5-second averaging (noise & particulate are high-entropy)
+pm_samples = {"pm1": [], "pm25": [], "pm10": []}
+noise_samples = []
+
 while True:
     try:
         # 1. Update GNSS State (both sources)
@@ -204,6 +208,12 @@ while True:
         
         # Noise
         noise_db = get_noise_db()
+
+        # Accumulate high-entropy readings for 5-second averaging
+        pm_samples["pm1"].append(pm1)
+        pm_samples["pm25"].append(pm25)
+        pm_samples["pm10"].append(pm10)
+        noise_samples.append(noise_db)
         
         # 3. Create Snapshot
         data = {
@@ -239,14 +249,31 @@ while True:
         # Overwrites the key with the newest data every second (for live dashboards)
         r.set('sensor_measurements', payload)
         
-        # Only push to the database queue every 5 loops (5 seconds)
+        # Only push to the database queue every 5 loops (5 seconds).
+        # Noise & particulate are averaged over the last 5 seconds to reduce entropy.
         if loop_count % 5 == 0:
-            r.rpush('sensor_db_queue', payload)
+            avg_pm1   = round(sum(pm_samples["pm1"])   / len(pm_samples["pm1"]))
+            avg_pm25  = round(sum(pm_samples["pm25"])  / len(pm_samples["pm25"]))
+            avg_pm10  = round(sum(pm_samples["pm10"])  / len(pm_samples["pm10"]))
+            avg_noise = round(sum(noise_samples) / len(noise_samples), 1)
+
+            db_data = dict(data)
+            db_data["pm1"]   = avg_pm1
+            db_data["pm25"]  = avg_pm25
+            db_data["pm10"]  = avg_pm10
+            db_data["noise"] = avg_noise
+
+            r.rpush('sensor_db_queue', json.dumps(db_data))
+
+            # Reset accumulators for the next 5-second window
+            pm_samples = {"pm1": [], "pm25": [], "pm10": []}
+            noise_samples = []
+
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"[{timestamp}] Phone: {gps_phone['lat']:.5f}, {gps_phone['lon']:.5f}, Acc ±{gps_phone['accuracy']:.1f}m | "
                   f"Sensor: {gps_sensor['lat']:.5f}, {gps_sensor['lon']:.5f}, Sats {gps_sensor['sats']} | "
                   f"Temp: {tempC:.1f}°C | Humidity: {humRH:.1f}% | AQI: {aqi_val} | eCO2: {eco2_val}ppm | "
-                  f"TVOC: {tvoc_val}ppb | PM2.5: {pm25}µg/m³ | Noise: {noise_db}dB")
+                  f"TVOC: {tvoc_val}ppb | PM2.5(avg): {avg_pm25}µg/m³ | Noise(avg): {avg_noise}dB")
         else:
             print("...")
             

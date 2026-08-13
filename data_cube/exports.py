@@ -6,12 +6,23 @@ written together per sensor reading, see save_sensor_data.py) and exports
 the joined result as a CSV file.
 
 Also provides a JSON export of all EnvironmentSurvey responses.
+
+Both exports are "collapsed": at a survey stop several participants submit
+surveys within a few minutes, each linking to a slightly different GNSS
+snapshot.  The CSV export collapses all those overlapping stationary points
+into a single representative row (and downsamples the rest of the route to
+roughly one point every ``ROUTE_MIN_SPACING`` metres), while the JSON export
+relinks every participant at a stop to the same ``gnss_snapshot_id`` so the
+two files stay referentially consistent.
 """
 import tempfile
 import os
 import json
-from datetime import datetime, time
+import math
+from datetime import datetime, time, timedelta
+from statistics import median
 
+import numpy as np
 import pandas as pd
 
 from .models import (
@@ -24,6 +35,33 @@ from .models import (
     NoiseMeasurement,
     EnvironmentSurvey,
 )
+
+
+# --------------------------------------------------------------------------- #
+# Survey-stop collapse configuration
+# --------------------------------------------------------------------------- #
+# At a real survey stop participants stand within a few metres of each other
+# and submit surveys within a few minutes.  These thresholds define when two
+# surveys belong to the same physical stop.  Clustering is sequential (sorted
+# by timestamp), so a route that revisits the same coordinates much later
+# correctly produces a separate stop rather than merging the two visits.
+STOP_SPATIAL_THRESHOLD_M = 20.0   # max distance between two surveys in a stop
+STOP_TIME_WINDOW_S = 300.0       # max gap (s) between consecutive surveys in a stop
+STOP_TIME_BUFFER_S = 120.0       # slack (s) added before/after a stop when
+                                  # matching route points to the stop
+ROUTE_MIN_SPACING_M = 5.0       # min metres between non-stop route points
+
+_EARTH_RADIUS_M = 6_371_000.0
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    """Great-circle distance between two WGS84 points, in metres."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lon2 - lon1)
+    a = (math.sin(dphi / 2) ** 2
+         + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2)
+    return 2 * _EARTH_RADIUS_M * math.asin(math.sqrt(a))
 
 
 def _parse_date_range(start=None, end=None):
@@ -49,6 +87,86 @@ def _parse_date_range(start=None, end=None):
         except ValueError:
             end_dt = None
     return start_dt, end_dt
+
+
+# Columns whose values are continuous sensor measurements and therefore
+# candidates for statistical outlier removal. GNSS coordinates, satellite
+# counts and integer-coded survey responses are intentionally excluded
+# (they are either bounded by validators or vary legitimately along a route).
+_OUTLIER_COLUMNS = [
+    'temperature', 'humidity', 'pressure',
+    'accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ',
+    'aqi', 'tvoc', 'eco2',
+    'pm1', 'pm25', 'pm10',
+    'noise_db',
+]
+
+
+def filter_outliers(df, columns=None, factor=1.5):
+    """Replaces statistically significant outliers using the IQR method.
+
+    For each numeric column, values falling outside
+    ``[Q1 - factor*IQR, Q3 + factor*IQR]`` are treated as outliers and
+    replaced with the previous valid value (forward-fill). Any leading
+    outliers (before the first valid value) are back-filled. This preserves
+    every row — including its GNSS coordinates and other valid sensor
+    readings — rather than discarding the whole snapshot.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        The joined sensor dataframe to filter (modified copy returned).
+    columns : list[str] or None
+        Columns to inspect. Defaults to :data:`_OUTLIER_COLUMNS`.
+    factor : float
+        IQR multiplier. 1.5 is the standard "mild outlier" threshold; 3.0
+        would restrict filtering to extreme outliers only.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A new DataFrame with outlier values replaced by forward-fill.
+    """
+    if df.empty:
+        return df
+
+    columns = columns if columns is not None else _OUTLIER_COLUMNS
+    present = [c for c in columns if c in df.columns]
+
+    if not present:
+        return df.copy()
+
+    result = df.copy()
+    total_replaced = 0
+    for col in present:
+        series = pd.to_numeric(result[col], errors='coerce')
+        # Skip columns that are entirely NaN (e.g. a sensor table had no data).
+        if series.notna().sum() < 4:
+            continue
+        q1 = series.quantile(0.25)
+        q3 = series.quantile(0.75)
+        iqr = q3 - q1
+        # Guard against zero-variance columns (IQR == 0).
+        if iqr == 0:
+            continue
+        lower = q1 - factor * iqr
+        upper = q3 + factor * iqr
+
+        outlier_mask = ~series.between(lower, upper) & series.notna()
+        replaced = outlier_mask.sum()
+        if replaced:
+            # Blank out the outliers, then carry the last valid value forward.
+            series = series.mask(outlier_mask)
+            series = series.ffill().bfill()
+            result[col] = series
+            total_replaced += replaced
+            print(f"[exports] Outlier filter: replaced {replaced} values in '{col}' "
+                  f"(bounds [{lower:.2f}, {upper:.2f}]).")
+
+    if total_replaced:
+        print(f"[exports] Outlier filter replaced {total_replaced} values total "
+              f"across {len(result)} rows.")
+    return result
 
 
 def build_sensor_dataframe(start=None, end=None):
@@ -125,11 +243,301 @@ def build_sensor_dataframe(start=None, end=None):
     merged['latitude'] = merged['latitude'].astype(float)
     merged['longitude'] = merged['longitude'].astype(float)
 
+    # Replace statistically significant outliers in the continuous sensor
+    # measurements with the previous valid value (forward-fill) before the
+    # dataframe is handed to the CSV exporter (or any other consumer). GNSS
+    # coordinates and bounded integer fields are left untouched (see
+    # filter_outliers docstring).
+    merged = filter_outliers(merged)
+
     return merged
 
 
+# --------------------------------------------------------------------------- #
+# Survey-stop clustering & route collapsing
+# --------------------------------------------------------------------------- #
+class _SurveyCluster:
+    """A group of surveys submitted at one physical survey stop."""
+
+    def __init__(self, first):
+        self.surveys = [first]
+        self.gnss_ids = [first['gnss_snapshot_id']]
+        self._lats = []
+        self._lons = []
+        self._timestamps = []
+        self._add_coords(first)
+
+    def _add_coords(self, survey):
+        pt = survey.get('_gnss_point')
+        if pt is not None:
+            self._lats.append(pt['latitude'])
+            self._lons.append(pt['longitude'])
+        ts = survey.get('_ts')
+        if ts is not None:
+            self._timestamps.append(ts)
+
+    def add(self, survey):
+        self.surveys.append(survey)
+        if survey.get('gnss_snapshot_id') is not None:
+            self.gnss_ids.append(survey['gnss_snapshot_id'])
+        self._add_coords(survey)
+
+    @property
+    def centroid_lat(self):
+        return median(self._lats) if self._lats else float('nan')
+
+    @property
+    def centroid_lon(self):
+        return median(self._lons) if self._lons else float('nan')
+
+    @property
+    def start_ts(self):
+        return min(self._timestamps) if self._timestamps else None
+
+    @property
+    def end_ts(self):
+        return max(self._timestamps) if self._timestamps else None
+
+    @property
+    def primary_gnss_id(self):
+        """The gnss_snapshot_id whose timestamp is closest to the cluster median.
+
+        This becomes the single id shared by every participant at the stop and
+        the id of the collapsed representative row in the route CSV.
+        """
+        if not self._timestamps or not self.gnss_ids:
+            return self.gnss_ids[0] if self.gnss_ids else None
+        target = median(self._timestamps)
+        best_id, best_delta = None, None
+        for s in self.surveys:
+            gid = s.get('gnss_snapshot_id')
+            ts = s.get('_ts')
+            if gid is None or ts is None:
+                continue
+            delta = abs((ts - target).total_seconds())
+            if best_delta is None or delta < best_delta:
+                best_id, best_delta = gid, delta
+        return best_id if best_id is not None else (self.gnss_ids[0] if self.gnss_ids else None)
+
+
+def _build_gnss_lookup(sensors_df):
+    """Maps ``id -> {id, latitude, longitude, timestamp}`` for every route row."""
+    lookup = {}
+    for row in sensors_df.itertuples(index=False):
+        rid = int(row.id) if pd.notna(getattr(row, 'id', None)) else None
+        if rid is None:
+            continue
+        lookup[rid] = {
+            'id': rid,
+            'latitude': float(row.latitude),
+            'longitude': float(row.longitude),
+            'timestamp': row.timestamp,
+        }
+    return lookup
+
+
+def _cluster_surveys(surveys, gnss_lookup,
+                     spatial_threshold=STOP_SPATIAL_THRESHOLD_M,
+                     time_window=STOP_TIME_WINDOW_S):
+    """Groups surveys into physical stops using spatial + temporal thresholds.
+
+    Surveys are sorted by timestamp.  A survey joins the current cluster when
+    its GNSS coordinates are within ``spatial_threshold`` metres of the cluster
+    centroid *and* its timestamp is within ``time_window`` seconds of the
+    cluster's most recent survey.  Otherwise it starts a new cluster, so a
+    route that revisits the same coordinates much later produces a separate
+    stop.
+    """
+    annotated = []
+    for s in surveys:
+        gid = s.get('gnss_snapshot_id')
+        pt = gnss_lookup.get(gid) if gid is not None else None
+        ts_raw = s.get('timestamp')
+        ts = None
+        if ts_raw:
+            try:
+                ts = pd.to_datetime(ts_raw).to_pydatetime()
+            except Exception:
+                ts = None
+        s2 = dict(s)
+        s2['_gnss_point'] = pt
+        s2['_ts'] = ts
+        annotated.append(s2)
+
+    annotated.sort(key=lambda s: (s['_ts'] is None, s['_ts']))
+
+    clusters = []
+    for s in annotated:
+        pt = s['_gnss_point']
+        ts = s['_ts']
+        placed = False
+        if pt is not None and ts is not None and clusters:
+            cur = clusters[-1]
+            if cur.end_ts is not None:
+                dt = abs((ts - cur.end_ts).total_seconds())
+                if dt <= time_window:
+                    d = haversine(pt['latitude'], pt['longitude'],
+                                  cur.centroid_lat, cur.centroid_lon)
+                    if d <= spatial_threshold:
+                        cur.add(s)
+                        placed = True
+        if not placed:
+            clusters.append(_SurveyCluster(s))
+    return clusters
+
+
+def _collapse_rows(rows, primary_id):
+    """Reduces a group of route rows to one representative row.
+
+    Numeric columns are averaged; the id and timestamp come from the primary
+    row; non-numeric columns take the primary row's value.
+    """
+    primary = rows.loc[rows['id'] == primary_id]
+    if primary.empty:
+        primary = rows.iloc[[0]]
+    primary = primary.iloc[0]
+
+    out = primary.copy()
+    for col in rows.columns:
+        if col in ('id', 'timestamp'):
+            continue
+        if pd.api.types.is_numeric_dtype(rows[col]):
+            vals = pd.to_numeric(rows[col], errors='coerce').dropna()
+            out[col] = float(vals.mean()) if not vals.empty else primary[col]
+        else:
+            out[col] = primary[col]
+    return out
+
+
+def _collapse_route(sensors_df, clusters,
+                    spatial_threshold=STOP_SPATIAL_THRESHOLD_M,
+                    time_buffer=STOP_TIME_BUFFER_S,
+                    min_spacing=ROUTE_MIN_SPACING_M):
+    """Builds the collapsed + downsampled route DataFrame.
+
+    Steps:
+      1. Mark every route point that belongs to a survey stop (within the
+         stop's spatial radius and temporal window).
+      2. Collapse each stop's points into one representative row keyed by the
+         cluster's ``primary_gnss_id``.
+      3. Downsample the remaining (non-stop) points to one every
+         ``min_spacing`` metres along the route.
+      4. Concatenate, sort by timestamp, return.
+    """
+    if sensors_df.empty:
+        return sensors_df.copy()
+
+    df = sensors_df.sort_values('timestamp').reset_index(drop=True).copy()
+    df['_is_stop'] = False
+    df['_cluster_id'] = -1
+
+    # 1. Mark stop points.
+    for idx, cluster in enumerate(clusters):
+        pid = cluster.primary_gnss_id
+        if pid is None or math.isnan(cluster.centroid_lat):
+            continue
+        clat, clon = cluster.centroid_lat, cluster.centroid_lon
+        t0 = cluster.start_ts - timedelta(seconds=time_buffer) if cluster.start_ts else None
+        t1 = cluster.end_ts + timedelta(seconds=time_buffer) if cluster.end_ts else None
+
+        for i, row in df.iterrows():
+            if df.at[i, '_is_stop']:
+                continue
+            ts = row['timestamp']
+            if t0 is not None and t1 is not None:
+                if pd.isna(ts) or ts < t0 or ts > t1:
+                    continue
+            d = haversine(row['latitude'], row['longitude'], clat, clon)
+            if d <= spatial_threshold:
+                df.at[i, '_is_stop'] = True
+                df.at[i, '_cluster_id'] = idx
+
+    # 2. Collapse stop points.
+    collapsed_rows = []
+    for idx, cluster in enumerate(clusters):
+        pid = cluster.primary_gnss_id
+        if pid is None:
+            continue
+        stop_rows = df[df['_cluster_id'] == idx]
+        if stop_rows.empty:
+            # No route points matched (e.g. survey id not in CSV); fabricate a
+            # row from the primary GNSS point so the CSV/JSON stay linked.
+            pt = cluster.surveys[0].get('_gnss_point')
+            if pt is None:
+                continue
+            row = {c: None for c in df.columns}
+            row['id'] = pid
+            row['latitude'] = pt['latitude']
+            row['longitude'] = pt['longitude']
+            row['timestamp'] = pt['timestamp']
+            row['_is_stop'] = True
+            row['_cluster_id'] = idx
+            collapsed_rows.append(pd.Series(row))
+        else:
+            collapsed_rows.append(_collapse_rows(stop_rows, pid))
+
+    # 3. Downsample non-stop points to min_spacing.
+    non_stop = df[~df['_is_stop']].copy()
+    kept = []
+    last_lat = last_lon = None
+    for _, row in non_stop.iterrows():
+        if last_lat is None:
+            kept.append(row)
+            last_lat, last_lon = row['latitude'], row['longitude']
+            continue
+        d = haversine(last_lat, last_lon, row['latitude'], row['longitude'])
+        if d >= min_spacing:
+            kept.append(row)
+            last_lat, last_lon = row['latitude'], row['longitude']
+    non_stop_kept = pd.DataFrame(kept, columns=df.columns) if kept else pd.DataFrame(columns=df.columns)
+
+    # 4. Combine & sort.
+    parts = []
+    if collapsed_rows:
+        parts.append(pd.DataFrame(collapsed_rows, columns=df.columns))
+    if not non_stop_kept.empty:
+        parts.append(non_stop_kept)
+
+    if not parts:
+        return df.drop(columns=['_is_stop', '_cluster_id'])
+
+    combined = pd.concat(parts, ignore_index=True)
+    combined = combined.sort_values('timestamp').reset_index(drop=True)
+    return combined.drop(columns=['_is_stop', '_cluster_id'])
+
+
+def _relink_surveys(surveys, clusters):
+    """Returns a copy of the survey entries with unified ``gnss_snapshot_id``.
+
+    Every participant at a given stop receives the cluster's
+    ``primary_gnss_id``.  Internal annotation keys (``_gnss_point``, ``_ts``)
+    are stripped so the output matches the original export schema.
+    """
+    id_to_primary = {}
+    for cluster in clusters:
+        pid = cluster.primary_gnss_id
+        for gid in cluster.gnss_ids:
+            if gid is not None:
+                id_to_primary[gid] = pid
+
+    out = []
+    for s in surveys:
+        s2 = {k: v for k, v in s.items() if not k.startswith('_')}
+        gid = s2.get('gnss_snapshot_id')
+        if gid is not None and gid in id_to_primary:
+            s2['gnss_snapshot_id'] = id_to_primary[gid]
+        out.append(s2)
+    return out
+
+
 def write_sensor_csv(start=None, end=None):
-    """Writes the joined sensor DataFrame to a temporary .csv file.
+    """Writes the collapsed route DataFrame to a temporary .csv file.
+
+    Survey stops are collapsed into a single representative point and the
+    remaining route is downsampled to roughly one point every
+    :data:`ROUTE_MIN_SPACING_M` metres, so the CSV contains continuous points
+    (one per ~5 m) with matching sensor measurements instead of dense
+    stationary blobs at each stop.
 
     Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
     to the given (inclusive) date range.
@@ -138,14 +546,21 @@ def write_sensor_csv(start=None, end=None):
     for cleaning it up after use.
     """
     df = build_sensor_dataframe(start=start, end=end)
+    surveys = build_survey_json(start=start, end=end)
+
+    gnss_lookup = _build_gnss_lookup(df)
+    clusters = _cluster_surveys(surveys, gnss_lookup)
+    route = _collapse_route(df, clusters)
 
     # Convert datetimes to ISO strings for a stable, readable CSV.
-    if 'timestamp' in df.columns:
-        df['timestamp'] = df['timestamp'].astype(str)
+    if 'timestamp' in route.columns:
+        route['timestamp'] = route['timestamp'].apply(
+            lambda x: x.isoformat() if pd.notna(x) and not isinstance(x, str) else x
+        )
 
     fd, path = tempfile.mkstemp(suffix='.csv')
     with os.fdopen(fd, 'w', newline='') as f:
-        df.to_csv(f, index=False)
+        route.to_csv(f, index=False)
     return path
 
 
@@ -175,9 +590,10 @@ def build_survey_json(start=None, end=None):
             'timestamp': s.timestamp.isoformat() if s.timestamp else None,
             'username': s.user.username if s.user else None,
             'responses': {
-                'q1': s.q1, 'q2': s.q2, 'q3': s.q3, 'q4': s.q4,
-                'q5': s.q5, 'q6': s.q6, 'q7': s.q7,
-                'q8': s.q8, 'q9': s.q9, 'q10': s.q10, 'q11': s.q11,
+                'noise': s.q1, 'air_quality': s.q2, 'air_temperature': s.q3,
+                'aesthetics': s.q4, 'diversity': s.q5, 'urban_design': s.q6,
+                'accessibility': s.q7, 'safety': s.q8, 'enjoyment': s.q9,
+                'stress': s.q10, 'comfort': s.q11,
             },
             'gnss_snapshot_id': s.gnss_snapshot_id,
         })
@@ -185,7 +601,12 @@ def build_survey_json(start=None, end=None):
 
 
 def write_survey_json(start=None, end=None):
-    """Writes the survey data to a temporary .json file.
+    """Writes the relinked survey data to a temporary .json file.
+
+    Every participant at a given survey stop is linked to the same
+    ``gnss_snapshot_id`` (the id of the collapsed representative point in the
+    CSV export), so the two files stay referentially consistent.  The survey
+    answers themselves are unchanged.
 
     Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
     to the given (inclusive) date range.
@@ -194,9 +615,15 @@ def write_survey_json(start=None, end=None):
     for cleaning it up after use.
     """
     entries = build_survey_json(start=start, end=end)
+    df = build_sensor_dataframe(start=start, end=end)
+
+    gnss_lookup = _build_gnss_lookup(df)
+    clusters = _cluster_surveys(entries, gnss_lookup)
+    relinked = _relink_surveys(entries, clusters)
+
     fd, path = tempfile.mkstemp(suffix='.json')
     with os.fdopen(fd, 'w') as f:
-        json.dump(entries, f, indent=2)
+        json.dump(relinked, f, indent=2)
     return path
 
 
