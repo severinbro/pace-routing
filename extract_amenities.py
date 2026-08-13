@@ -75,8 +75,17 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 # Loading
 # --------------------------------------------------------------------------- #
 def load_sensors(path: str) -> pd.DataFrame:
-    """Loads the collapsed route CSV and normalises types."""
+    """Loads the collapsed route CSV and normalises types.
+
+    Only the columns needed for amenity extraction (``id``, ``latitude``,
+    ``longitude``) are retained, so the script is unaffected by extra columns
+    appended by downstream enrichers such as ``enrich_weather.py`` (e.g.
+    ``temperature_2m``, ``relative_humidity_2m``, ``surface_pressure``) or by
+    changes to the column ordering.
+    """
     df = pd.read_csv(path)
+    needed = [c for c in ("id", "latitude", "longitude") if c in df.columns]
+    df = df[needed].copy() if needed else df.copy()
     if "id" in df.columns:
         df["id"] = pd.to_numeric(df["id"], errors="coerce").astype("Int64")
     for col in ("latitude", "longitude"):
@@ -108,10 +117,15 @@ def build_stop_locations(sensors: pd.DataFrame, surveys: list[dict]):
 
     coord_by_id = {}
     for row in sensors.itertuples(index=False):
-        rid = int(row.id) if pd.notna(getattr(row, "id", None)) else None
+        rid_val = getattr(row, "id", None)
+        rid = int(rid_val) if pd.notna(rid_val) else None
         if rid is None:
             continue
-        coord_by_id[rid] = (float(row.latitude), float(row.longitude))
+        lat_val = getattr(row, "latitude", None)
+        lon_val = getattr(row, "longitude", None)
+        if lat_val is None or lon_val is None or pd.isna(lat_val) or pd.isna(lon_val):
+            continue
+        coord_by_id[rid] = (float(lat_val), float(lon_val))
 
     stops = []
     missing = []
