@@ -150,17 +150,33 @@
     document.getElementById('start-form').addEventListener('submit', function(e) {
         e.preventDefault();
         const total = document.getElementById('total-stops-input').value;
-        fetch('{% url "campaign_start" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'total_stops=' + total,
-        })
-        .then(res => res.json())
-        .then(() => refreshStatus())
-        .catch(err => console.error('Start failed:', err));
+        // Fetch the current collect-mode state before starting so we can
+        // notify the user whether collection was already active or not.
+        fetch('{% url "campaign_status" %}')
+            .then(res => res.json())
+            .then(state => {
+                const wasCollecting = state.collect_mode;
+                return fetch('{% url "campaign_start" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'total_stops=' + total,
+                })
+                .then(res => res.json())
+                .then(data => {
+                    refreshStatus();
+                    if (wasCollecting) {
+                        alert('Campaign started with ' + total + ' stops.\n' +
+                              'Sensor data collection was already active and continues uninterrupted.');
+                    } else {
+                        alert('Campaign started with ' + total + ' stops.\n' +
+                              'Sensor data collection has been automatically enabled.');
+                    }
+                });
+            })
+            .catch(err => console.error('Start failed:', err));
     });
 
     // Unlock next stop (debounced: disable immediately on click to prevent

@@ -201,6 +201,7 @@
         var csrfToken = document.getElementById('csrf-token').value;
 
         function updateLabel(active) {
+            collectSwitch.checked = active;
             collectLabel.textContent = active ? 'Recording' : 'Paused';
             collectLabel.className = 'fw-bold ' + (active ? 'text-success' : 'text-muted');
         }
@@ -223,6 +224,18 @@
                 updateLabel(!active);
             });
         });
+
+        // Poll for collect-mode changes every 3 seconds so the slider
+        // reflects state changes made from the campaign hub (e.g. when a
+        // campaign starts and auto-enables collection) without requiring a
+        // page refresh.
+        function pollCollectMode() {
+            fetch('{% url "campaign_status" %}')
+                .then(res => res.json())
+                .then(state => updateLabel(state.collect_mode))
+                .catch(err => console.error('Collect-mode poll failed:', err));
+        }
+        setInterval(pollCollectMode, 3000);
     })();
 </script>
 {% endblock %}
