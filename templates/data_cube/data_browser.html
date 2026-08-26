@@ -18,8 +18,11 @@
             Export
         </div>
         <p class="text-muted mb-3">
-            Joins the 7 sensor tables on their shared <code>id</code> column into a
-            single CSV file. Optionally pick a date range to limit the exported records.
+            Exports the route as a single CSV with continuous points (one every
+            ~5&nbsp;m) and matching sensor measurements — survey stops are
+            collapsed into a single representative point. The survey JSON
+            relinks every participant at a stop to the same GNSS id.
+            Optionally pick a date range to limit the exported records.
         </p>
         <button type="button" class="btn btn-pace-mint" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="csv">
             <i class="bi bi-file-earmark-spreadsheet-fill"></i> Export Sensor Data (CSV)
