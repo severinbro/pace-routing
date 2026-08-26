@@ -22,6 +22,8 @@
             ~5&nbsp;m) and matching sensor measurements — survey stops are
             collapsed into a single representative point. The survey JSON
             relinks every participant at a stop to the same GNSS id.
+            Weather and amenities exports require an internet connection and
+            cover the same locations/timespan as the measured data.
             Optionally pick a date range to limit the exported records.
         </p>
         <button type="button" class="btn btn-pace-mint" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="csv">
@@ -30,6 +32,33 @@
         <button type="button" class="btn btn-pace-mint ms-2" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="survey">
             <i class="bi bi-file-earmark-text-fill"></i> Export Survey Data (JSON)
         </button>
+        <button type="button" class="btn btn-pace-mint ms-2" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="weather">
+            <i class="bi bi-cloud-sun-fill"></i> Export Weather Data (CSV)
+        </button>
+        <button type="button" class="btn btn-pace-mint ms-2" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="amenities">
+            <i class="bi bi-geo-alt-fill"></i> Export Amenities Data (CSV)
+        </button>
+    </div>
+
+    <!-- Data Collection Toggle -->
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-record-circle"></i></div>
+            Sensor Data Collection
+        </div>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <p class="text-muted small mb-0">Toggle whether sensor readings are saved to the database.</p>
+            <div class="d-inline-flex align-items-center gap-2">
+                <span class="fw-bold {% if collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-label">
+                    {% if collect_mode %}Recording{% else %}Paused{% endif %}
+                </span>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" role="switch" id="collect-switch"
+                           style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
+                           {% if collect_mode %}checked{% endif %}>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Date Range Export Modal -->
@@ -137,15 +166,21 @@
         // URLs resolved server-side so we don't hardcode paths.
         var urls = {
             csv: "{% url 'export_csv' %}",
-            survey: "{% url 'export_survey_json' %}"
+            survey: "{% url 'export_survey_json' %}",
+            weather: "{% url 'export_weather_csv' %}",
+            amenities: "{% url 'export_amenities_csv' %}"
         };
 
         exportModal.addEventListener('show.bs.modal', function (event) {
             var target = event.relatedTarget.getAttribute('data-export-target');
             exportForm.action = urls[target] || urls.csv;
-            exportSubmit.innerHTML = (target === 'survey')
-                ? '<i class="bi bi-download"></i> Download JSON'
-                : '<i class="bi bi-download"></i> Download CSV';
+            var labels = {
+                csv: 'Download CSV',
+                survey: 'Download JSON',
+                weather: 'Download CSV',
+                amenities: 'Download CSV'
+            };
+            exportSubmit.innerHTML = '<i class="bi bi-download"></i> ' + (labels[target] || labels.csv);
         });
 
         // Validate that start <= end before submitting.
@@ -156,6 +191,37 @@
                 e.preventDefault();
                 alert('Start date must be before or equal to the end date.');
             }
+        });
+    })();
+
+    // --- Data collection toggle ---
+    (function () {
+        var collectSwitch = document.getElementById('collect-switch');
+        var collectLabel = document.getElementById('collect-label');
+        var csrfToken = document.getElementById('csrf-token').value;
+
+        function updateLabel(active) {
+            collectLabel.textContent = active ? 'Recording' : 'Paused';
+            collectLabel.className = 'fw-bold ' + (active ? 'text-success' : 'text-muted');
+        }
+
+        collectSwitch.addEventListener('change', function () {
+            var active = this.checked;
+            fetch('{% url "toggle_collect_mode" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'active=' + (active ? '1' : '0'),
+            })
+            .then(res => res.json())
+            .then(data => updateLabel(data.collect_mode))
+            .catch(err => {
+                console.error('Toggle failed:', err);
+                this.checked = !active;
+                updateLabel(!active);
+            });
         });
     })();
 </script>

@@ -13,6 +13,8 @@ urlpatterns = [
     path('data-browser/', views.data_browser, name='data_browser'),
     path('export-csv/', views.export_csv, name='export_csv'),
     path('export-survey-json/', views.export_survey_json, name='export_survey_json'),
+    path('export-weather-csv/', views.export_weather_csv, name='export_weather_csv'),
+    path('export-amenities-csv/', views.export_amenities_csv, name='export_amenities_csv'),
     path('about/', views.about, name='about'),
 
     # --- CAMPAIGN MANAGEMENT (admin only) ---

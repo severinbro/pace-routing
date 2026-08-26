@@ -23,16 +23,25 @@ r = redis.Redis(host='redis', port=6379, db=0)
 #   campaign:total_stops -> total number of survey stops (int)
 #   campaign:current_stop -> index of the currently unlocked stop (1-based)
 #   campaign:collect_mode -> '1' when sensor data should be persisted
+#   campaign:submitted_stops -> comma-separated list of submitted stop indices
 def campaign_state():
     """Returns a dict describing the current campaign state."""
     active = r.get('campaign:active') == b'1'
     total = int(r.get('campaign:total_stops') or 0)
     current = int(r.get('campaign:current_stop') or 0)
+    # Track which stops have been submitted so unlock can be guarded.
+    submitted_raw = r.get('campaign:submitted_stops') or b''
+    submitted_stops = set()
+    try:
+        submitted_stops = set(int(x) for x in submitted_raw.decode().split(',') if x.strip())
+    except (ValueError, AttributeError):
+        submitted_stops = set()
     return {
         'active': active,
         'total_stops': total,
         'current_stop': current,
         'collect_mode': r.get('collect_mode') == b'1',
+        'submitted_stops': sorted(submitted_stops),
     }
 
 
@@ -157,7 +166,10 @@ def data_browser(request):
         },
     ]
 
-    return render(request, 'data_cube/data_browser.html', {'tables': tables})
+    return render(request, 'data_cube/data_browser.html', {
+        'tables': tables,
+        'collect_mode': r.get('collect_mode') == b'1',
+    })
 
 # --- ADMIN-ONLY: CSV EXPORT ---
 # Import at module level so the (heavy) pandas import happens once at worker
@@ -167,6 +179,8 @@ def data_browser(request):
 from data_cube.exports import (
     write_sensor_csv, export_filename,
     write_survey_json, survey_export_filename,
+    write_weather_csv, weather_export_filename,
+    write_amenities_csv, amenities_export_filename,
 )
 
 
@@ -219,6 +233,63 @@ def export_survey_json(request):
             os.remove(path)
         raise
 
+# --- ADMIN-ONLY: WEATHER CSV EXPORT (Open-Meteo, needs internet) ---
+@staff_member_required(login_url='admin_login')
+def export_weather_csv(request):
+    """Streams a weather-enriched measurements CSV using Open-Meteo data.
+
+    Requires an internet connection to reach the Open-Meteo API.  The weather
+    data covers the same timespan and locations as the measured data.
+
+    Optional ``start`` and ``end`` query parameters (ISO ``YYYY-MM-DD``) restrict
+    the export to the given (inclusive) date range.
+    """
+    start = request.GET.get('start') or None
+    end = request.GET.get('end') or None
+    path = write_weather_csv(start=start, end=end)
+    try:
+        response = FileResponse(
+            open(path, 'rb'),
+            as_attachment=True,
+            filename=weather_export_filename(),
+            content_type='text/csv',
+        )
+        response._resource_closers.append(lambda: os.remove(path))
+        return response
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
+
+# --- ADMIN-ONLY: AMENITIES CSV EXPORT (Overpass, needs internet) ---
+@staff_member_required(login_url='admin_login')
+def export_amenities_csv(request):
+    """Streams a CSV of amenity counts per survey stop via OpenStreetMap.
+
+    Requires an internet connection to reach the Overpass API.  For every
+    unique survey stop location, records the number of distinct ``amenity=*``
+    types found within a 100 m radius.
+
+    Optional ``start`` and ``end`` query parameters (ISO ``YYYY-MM-DD``) restrict
+    the export to the given (inclusive) date range.
+    """
+    start = request.GET.get('start') or None
+    end = request.GET.get('end') or None
+    path = write_amenities_csv(start=start, end=end)
+    try:
+        response = FileResponse(
+            open(path, 'rb'),
+            as_attachment=True,
+            filename=amenities_export_filename(),
+            content_type='text/csv',
+        )
+        response._resource_closers.append(lambda: os.remove(path))
+        return response
+    except Exception:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
+
 # --- ADMIN-ONLY: LANDING PAGE AFTER SIGN IN ---
 @staff_member_required(login_url='admin_login')
 def admin_home(request):
@@ -246,6 +317,7 @@ def campaign_start(request):
     r.set('campaign:active', '1')
     r.set('campaign:total_stops', total_stops)
     r.set('campaign:current_stop', 0)  # no stop unlocked yet
+    r.delete('campaign:submitted_stops')  # clear submitted-stop tracking
     r.set('collect_mode', '1')  # start collecting sensor data
     r.set('campaign:collect_mode', '1')  # mirror for campaign hub display
     return JsonResponse(campaign_state())
@@ -256,18 +328,31 @@ def campaign_abort(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     r.delete('campaign:active', 'campaign:total_stops', 'campaign:current_stop',
-             'campaign:collect_mode', 'collect_mode')
+             'campaign:collect_mode', 'campaign:submitted_stops', 'collect_mode')
     return JsonResponse({'active': False})
 
 @staff_member_required(login_url='admin_login')
 def campaign_unlock_stop(request):
-    """Unlocks the next survey stop for participants."""
+    """Unlocks the next survey stop for participants.
+
+    Guards against the double-press bug: the current stop must have been
+    submitted before the next one can be unlocked.  This prevents an
+    accidental second click from skipping a stop and storing it without data.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     state = campaign_state()
     if not state['active']:
         return JsonResponse({'error': 'No active campaign'}, status=400)
-    next_stop = state['current_stop'] + 1
+    current = state['current_stop']
+    # If a stop is currently unlocked but has not been submitted yet, refuse
+    # to advance — the participant must still submit the current stop.
+    if current > 0 and current not in state['submitted_stops']:
+        return JsonResponse({
+            'error': 'Current stop has not been submitted yet',
+            'current_stop': current,
+        }, status=409)
+    next_stop = current + 1
     if next_stop > state['total_stops']:
         return JsonResponse({'error': 'All stops already unlocked'}, status=400)
     r.set('campaign:current_stop', next_stop)
@@ -388,6 +473,25 @@ def surveys_tab(request):
             gnss_snapshot=gnss_snapshot,
             campaign_stop=state['current_stop'],
         )
+
+        # Mark this stop as submitted so the admin can unlock the next one.
+        submitted = set(state.get('submitted_stops', set()))
+        submitted.add(state['current_stop'])
+        r.set('campaign:submitted_stops', ','.join(str(s) for s in sorted(submitted)))
+
+        # If this was the last stop, reset the campaign so the success
+        # message shows once (via the ?complete=1 flag) and the state then
+        # returns to "no active campaign" instead of persisting indefinitely.
+        was_last_stop = state['current_stop'] >= state['total_stops']
+        if was_last_stop:
+            r.delete('campaign:active', 'campaign:total_stops',
+                     'campaign:current_stop', 'campaign:collect_mode',
+                     'campaign:submitted_stops', 'collect_mode')
+            # Redirect directly with complete=1 so the thank-you screen shows
+            # once; subsequent loads see no active campaign (waiting screen).
+            from django.urls import reverse
+            return redirect(reverse('surveys_tab') + '?done=1&complete=1')
+
         return redirect('surveys_tab_done')
 
     submitted = request.GET.get('done') == '1'
@@ -423,6 +527,10 @@ def surveys_tab_done(request):
     """Shows the thank-you confirmation after a survey submission."""
     from django.urls import reverse
     state = campaign_state()
+    # The campaign keys are deleted when the last stop is submitted, so
+    # state['active'] will be False in that case.  The ?complete=1 flag is set
+    # by the redirect below so the thank-you screen shows once, after which
+    # the survey page returns to the waiting screen (no active campaign).
     campaign_complete = (state['active'] and
                          state['current_stop'] >= state['total_stops'] and
                          state['total_stops'] > 0)

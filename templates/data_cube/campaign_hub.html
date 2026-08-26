@@ -59,27 +59,6 @@
         </form>
     </div>
 
-    <!-- Data Collection Toggle (always available) -->
-    <div class="pace-card p-4 mb-4">
-        <div class="pace-section-title">
-            <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-record-circle"></i></div>
-            Sensor Data Collection
-        </div>
-        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <p class="text-muted small mb-0">Toggle whether sensor readings are saved to the database.</p>
-            <div class="d-inline-flex align-items-center gap-2">
-                <span class="fw-bold {% if campaign.collect_mode %}text-success{% else %}text-muted{% endif %}" id="collect-label">
-                    {% if campaign.collect_mode %}Recording{% else %}Paused{% endif %}
-                </span>
-                <div class="form-check form-switch mb-0">
-                    <input class="form-check-input" type="checkbox" role="switch" id="collect-switch"
-                           style="width: 3.5rem; height: 1.75rem; cursor: pointer;"
-                           {% if campaign.collect_mode %}checked{% endif %}>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Active Campaign Controls -->
     <div class="pace-card p-4 mb-4" id="controls-card" {% if not campaign.active %}style="display: none;"{% endif %}>
         <div class="pace-section-title">
@@ -141,13 +120,6 @@
                         document.getElementById('unlock-btn').innerHTML = '<i class="bi bi-check-circle-fill"></i> All Stops Unlocked';
                     }
                 }
-
-                // Always update the collection toggle (it's independent of campaign state).
-                const collectSwitch = document.getElementById('collect-switch');
-                collectSwitch.checked = state.collect_mode;
-                const collectLabel = document.getElementById('collect-label');
-                collectLabel.textContent = state.collect_mode ? 'Recording' : 'Paused';
-                collectLabel.className = 'fw-bold ' + (state.collect_mode ? 'text-success' : 'text-muted');
             })
             .catch(err => console.error('Status refresh failed:', err));
     }
@@ -169,37 +141,28 @@
         .catch(err => console.error('Start failed:', err));
     });
 
-    // Unlock next stop
+    // Unlock next stop (debounced: disable immediately on click to prevent
+    // double-press skipping a stop; re-enabled after status refresh).
     document.getElementById('unlock-btn').addEventListener('click', function() {
+        this.disabled = true;
         fetch('{% url "campaign_unlock_stop" %}', {
             method: 'POST',
             headers: { 'X-CSRFToken': csrfToken },
         })
-        .then(res => res.json())
-        .then(() => refreshStatus())
-        .catch(err => console.error('Unlock failed:', err));
-    });
-
-    // Toggle data collection
-    document.getElementById('collect-switch').addEventListener('change', function() {
-        const active = this.checked;
-        fetch('{% url "campaign_toggle_collect" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrfToken,
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'active=' + (active ? '1' : '0'),
-        })
-        .then(res => res.json())
-        .then(data => {
-            const label = document.getElementById('collect-label');
-            label.textContent = data.collect_mode ? 'Recording' : 'Paused';
-            label.className = 'fw-bold ' + (data.collect_mode ? 'text-success' : 'text-muted');
+        .then(res => {
+            if (res.status === 409) {
+                // Current stop not submitted yet — re-enable the button.
+                this.disabled = false;
+                return res.json().then(data => {
+                    alert('Stop ' + data.current_stop + ' has not been submitted yet. ' +
+                          'Wait for the participant to submit the current survey before unlocking the next one.');
+                });
+            }
+            return res.json().then(() => refreshStatus());
         })
         .catch(err => {
-            console.error('Toggle failed:', err);
-            this.checked = !active;
+            console.error('Unlock failed:', err);
+            this.disabled = false;
         });
     });
 

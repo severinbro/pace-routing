@@ -12,6 +12,9 @@ For every *unique* survey stop location (identified by the shared
 ``gnss_snapshot_id`` that all participants at a stop are relinked to) the
 script queries OpenStreetMap via the Overpass API and records:
 
+  * ``unique_amenity_types`` — number of distinct amenity types (e.g.
+    ``cafe``, ``bench``, ``restaurant``, ``parking``) found within a 100 m
+    radius.  Repeated types count once, so ``['cafe', 'bench', 'cafe']`` -> 2.
   * ``unique_shop_types`` — number of distinct shop types (e.g. ``cafe``,
     ``groceries``, ``bakery``) found within a 100 m radius.  Repeated types
     count once, so ``['cafe', 'groceries', 'cafe', 'bakery']`` -> 3.
@@ -160,6 +163,17 @@ _PT_OVERPASS_QUERY = """
 out center;
 """
 
+# Amenities: anything tagged with amenity=* (cafes, benches, restaurants,
+# parking, etc.).  This is the primary amenity count requested by the project.
+_AMENITY_OVERPASS_QUERY = """
+[out:json][timeout:60];
+(
+  node(around:{radius},{lat},{lon})["amenity"];
+  way(around:{radius},{lat},{lon})["amenity"];
+);
+out center tags;
+"""
+
 # Shops: anything tagged with shop=* (excludes amenities like cafes that use
 # amenity=cafe, but OSM convention is that retail shops use shop=*).  We also
 # include a few amenity-based retail types for completeness.
@@ -219,6 +233,19 @@ def _overpass_request(query: str, url: str, max_retries: int = 5) -> dict:
 # --------------------------------------------------------------------------- #
 # Feature extraction
 # --------------------------------------------------------------------------- #
+def count_unique_amenity_types(lat: float, lon: float, radius: float, url: str) -> int:
+    """Number of distinct ``amenity=*`` values within ``radius`` metres."""
+    query = _AMENITY_OVERPASS_QUERY.format(lat=lat, lon=lon, radius=int(radius))
+    data = _overpass_request(query, url)
+    types = set()
+    for el in data.get("elements", []):
+        tags = el.get("tags", {})
+        amenity = tags.get("amenity")
+        if amenity:
+            types.add(amenity)
+    return len(types)
+
+
 def count_unique_shop_types(lat: float, lon: float, radius: float, url: str) -> int:
     """Number of distinct ``shop=*`` values within ``radius`` metres."""
     query = _SHOP_OVERPASS_QUERY.format(lat=lat, lon=lon, radius=int(radius))
@@ -281,8 +308,8 @@ def write_amenities_csv(rows: list[dict], path: str) -> None:
     if not rows:
         # Still write a header-only file so downstream tools see the schema.
         fieldnames = ["gnss_snapshot_id", "latitude", "longitude",
-                      "unique_shop_types", "closest_pt_distance_m",
-                      "unique_pavement_types"]
+                      "unique_amenity_types", "unique_shop_types",
+                      "closest_pt_distance_m", "unique_pavement_types"]
     else:
         fieldnames = list(rows[0].keys())
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -307,6 +334,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Path to the relinked survey JSON export.")
     p.add_argument("--out", default=None,
                    help="Output CSV path. Defaults to <sensors>_amenities.csv.")
+    p.add_argument("--amenity-radius", type=float, default=100.0,
+                   help="Radius (metres) for amenity detection.")
     p.add_argument("--shop-radius", type=float, default=100.0,
                    help="Radius (metres) for shop detection.")
     p.add_argument("--pt-radius", type=float, default=1000.0,
@@ -351,6 +380,13 @@ def main(argv: list[str] | None = None) -> int:
               f"({lat:.6f}, {lon:.6f})")
 
         try:
+            amenities = count_unique_amenity_types(lat, lon, args.amenity_radius,
+                                                    args.overpass_url)
+        except Exception as e:
+            print(f"[amenities]   amenity query failed: {e}", file=sys.stderr)
+            amenities = None
+
+        try:
             shops = count_unique_shop_types(lat, lon, args.shop_radius,
                                             args.overpass_url)
         except Exception as e:
@@ -376,11 +412,13 @@ def main(argv: list[str] | None = None) -> int:
             "gnss_snapshot_id": gid,
             "latitude": lat,
             "longitude": lon,
+            "unique_amenity_types": amenities,
             "unique_shop_types": shops,
             "closest_pt_distance_m": pt_dist,
             "unique_pavement_types": pavement,
         })
-        print(f"[amenities]   shops={shops}  pt_dist={pt_dist}  pavement={pavement}")
+        print(f"[amenities]   amenities={amenities}  shops={shops}  "
+              f"pt_dist={pt_dist}  pavement={pavement}")
 
         if i < len(stops) and args.delay > 0:
             time.sleep(args.delay)

@@ -60,7 +60,7 @@ import math
 import os
 import sys
 from datetime import datetime, timedelta
-from statistics import median
+from statistics import mean, median
 
 import pandas as pd
 
@@ -160,11 +160,11 @@ class SurveyCluster:
     # -- cluster properties ------------------------------------------------ #
     @property
     def centroid_lat(self) -> float:
-        return median(self._lats) if self._lats else float("nan")
+        return mean(self._lats) if self._lats else float("nan")
 
     @property
     def centroid_lon(self) -> float:
-        return median(self._lons) if self._lons else float("nan")
+        return mean(self._lons) if self._lons else float("nan")
 
     @property
     def start_ts(self) -> datetime | None:

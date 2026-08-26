@@ -20,7 +20,7 @@ import os
 import json
 import math
 from datetime import datetime, time, timedelta
-from statistics import median
+from statistics import mean, median
 
 import numpy as np
 import pandas as pd
@@ -198,7 +198,7 @@ def build_sensor_dataframe(start=None, end=None):
         )
 
     # Only non-GNSS sensor tables are joined onto the phone GNSS base table.
-    # The GNSS sensor (SAM-M10Q) measurements are excluded from the GPKG export.
+    # The GNSS sensor (SAM-M10Q) measurements are excluded from the CSV export.
     # When a date range is applied, restrict the joined tables to the same
     # window so stale rows from outside the range don't leak in via the merge.
     range_filters = {}
@@ -278,11 +278,11 @@ class _SurveyCluster:
 
     @property
     def centroid_lat(self):
-        return median(self._lats) if self._lats else float('nan')
+        return mean(self._lats) if self._lats else float('nan')
 
     @property
     def centroid_lon(self):
-        return median(self._lons) if self._lons else float('nan')
+        return mean(self._lons) if self._lons else float('nan')
 
     @property
     def start_ts(self):
@@ -624,3 +624,196 @@ def write_survey_json(start=None, end=None):
 
 def survey_export_filename():
     return f"pace_survey_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+
+# --------------------------------------------------------------------------- #
+# Weather enrichment export (Open-Meteo)
+# --------------------------------------------------------------------------- #
+def write_weather_csv(start=None, end=None):
+    """Writes a weather-enriched measurements CSV using Open-Meteo data.
+
+    Builds the same collapsed route DataFrame as :func:`write_sensor_csv`,
+    then enriches every row with Open-Meteo weather variables
+    (``temperature_2m``, ``relative_humidity_2m``, ``surface_pressure``)
+    matched to the row's GNSS coordinates and timestamp.
+
+    Requires an internet connection to reach the Open-Meteo API.
+
+    Returns the absolute path to the written file; caller is responsible
+    for cleaning it up after use.
+    """
+    import enrich_weather as _ew
+
+    # Produce the measurements CSV first, then enrich it in place.
+    sensor_path = write_sensor_csv(start=start, end=end)
+    try:
+        df = _ew.load_sensors(sensor_path)
+    except Exception:
+        if os.path.exists(sensor_path):
+            os.remove(sensor_path)
+        raise
+
+    valid = df.dropna(subset=['latitude', 'longitude', 'timestamp']).copy()
+    if valid.empty:
+        for v in _ew.WEATHER_VARS:
+            df[v] = pd.NA
+    else:
+        prec = 2
+        valid['_loc_key'] = (
+            valid['latitude'].round(prec).astype(str)
+            + ',' + valid['longitude'].round(prec).astype(str)
+        )
+        weather_cache = {}
+        for loc_key, grp in valid.groupby('_loc_key', sort=False):
+            lat = grp['latitude'].iloc[0]
+            lon = grp['longitude'].iloc[0]
+            grp_min = grp['timestamp'].min().floor('h')
+            grp_max = grp['timestamp'].max().ceil('h')
+            start_date = (grp_min - pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+            end_date = (grp_max + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+            try:
+                wdf = _ew.fetch_weather(
+                    lat, lon, start_date, end_date,
+                    _ew.OPEN_METEO_FORECAST_URL, use_archive=False,
+                )
+            except Exception:
+                wdf = pd.DataFrame(columns=['time'] + list(_ew.WEATHER_VARS))
+            weather_cache[loc_key] = wdf
+
+        enriched_parts = []
+        for loc_key, grp in valid.groupby('_loc_key', sort=False):
+            wdf = weather_cache.get(loc_key)
+            if wdf is None or wdf.empty:
+                grp = grp.copy()
+                for v in _ew.WEATHER_VARS:
+                    grp[v] = pd.NA
+                enriched_parts.append(grp)
+            else:
+                enriched_parts.append(_ew.match_nearest(grp, wdf))
+
+        enriched_valid = pd.concat(enriched_parts, ignore_index=True)
+        keep_cols = list(_ew.WEATHER_VARS)
+        enriched_valid = enriched_valid[keep_cols]
+        valid_idx = valid.index
+        for v in keep_cols:
+            df[v] = pd.NA
+            df.loc[valid_idx, v] = enriched_valid[v].values
+
+    df = df.drop(columns=[c for c in ['_loc_key'] if c in df.columns])
+
+    fd, path = tempfile.mkstemp(suffix='.csv')
+    with os.fdopen(fd, 'w', newline='') as f:
+        out = df.copy()
+        if 'timestamp' in out.columns and pd.api.types.is_datetime64_any_dtype(out['timestamp']):
+            out['timestamp'] = out['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S%z').str.replace('+0000', '+00:00')
+        out.to_csv(f, index=False, encoding='utf-8')
+
+    # Clean up the intermediate sensor CSV.
+    if os.path.exists(sensor_path):
+        os.remove(sensor_path)
+    return path
+
+
+def weather_export_filename():
+    return f"pace_weather_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+
+
+# --------------------------------------------------------------------------- #
+# Amenities export (OpenStreetMap Overpass)
+# --------------------------------------------------------------------------- #
+def write_amenities_csv(start=None, end=None):
+    """Writes a CSV of amenity counts per survey stop via OpenStreetMap.
+
+    For every unique survey stop location (identified by the shared
+    ``gnss_snapshot_id``), queries OpenStreetMap via the Overpass API and
+    records the number of distinct ``amenity=*`` types found within a 100 m
+    radius.
+
+    Requires an internet connection to reach the Overpass API.
+
+    Returns the absolute path to the written file; caller is responsible
+    for cleaning it up after use.
+    """
+    import extract_amenities as _ea
+
+    # Build the survey stop locations from the collapsed route + survey JSON.
+    surveys = build_survey_json(start=start, end=end)
+    df = build_sensor_dataframe(start=start, end=end)
+    gnss_lookup = _build_gnss_lookup(df)
+    clusters = _cluster_surveys(surveys, gnss_lookup)
+
+    # Collect unique stop coordinates from cluster primary GNSS points.
+    stops = []
+    for cluster in clusters:
+        pid = cluster.primary_gnss_id
+        if pid is None:
+            continue
+        pt = gnss_lookup.get(pid)
+        if pt is None:
+            continue
+        stops.append((pid, pt['latitude'], pt['longitude']))
+
+    overpass_url = 'https://overpass-api.de/api/interpreter'
+    radius = 100.0
+
+    rows = []
+    for gid, lat, lon in stops:
+        try:
+            amenity_count = _count_unique_amenity_types(lat, lon, radius, overpass_url)
+        except Exception:
+            amenity_count = None
+        rows.append({
+            'gnss_snapshot_id': gid,
+            'latitude': lat,
+            'longitude': lon,
+            'unique_amenity_types': amenity_count,
+        })
+
+    fd, path = tempfile.mkstemp(suffix='.csv')
+    with os.fdopen(fd, 'w', newline='') as f:
+        import csv as _csv
+        fieldnames = ['gnss_snapshot_id', 'latitude', 'longitude', 'unique_amenity_types']
+        w = _csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for row in rows:
+            w.writerow(row)
+    return path
+
+
+def _count_unique_amenity_types(lat, lon, radius, url):
+    """Number of distinct ``amenity=*`` values within ``radius`` metres."""
+    import urllib.request, urllib.parse, json as _json, time as _time
+
+    query = """
+[out:json][timeout:60];
+(
+  node(around:{radius},{lat},{lon})["amenity"];
+  way(around:{radius},{lat},{lon})["amenity"];
+);
+out center tags;
+""".format(lat=lat, lon=lon, radius=int(radius))
+
+    data_str = ('data=' + urllib.parse.quote(query)).encode('utf-8')
+    req = urllib.request.Request(url, data=data_str, headers={'User-Agent': 'PACE-amenities/1.0'})
+
+    max_retries = 5
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = _json.loads(resp.read().decode('utf-8'))
+            types = set()
+            for el in data.get('elements', []):
+                tags = el.get('tags', {})
+                amenity = tags.get('amenity')
+                if amenity:
+                    types.add(amenity)
+            return len(types)
+        except Exception as e:
+            last_err = e
+            _time.sleep(2 ** attempt)
+    raise RuntimeError(f'Overpass request failed after {max_retries} attempts: {last_err}')
+
+
+def amenities_export_filename():
+    return f"pace_amenities_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
