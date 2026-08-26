@@ -11,7 +11,7 @@ urlpatterns = [
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
     path('api/toggle-collect-mode/', views.toggle_collect_mode, name='toggle_collect_mode'),
     path('data-browser/', views.data_browser, name='data_browser'),
-    path('export-gpkg/', views.export_gpkg, name='export_gpkg'),
+    path('export-csv/', views.export_csv, name='export_csv'),
     path('export-survey-json/', views.export_survey_json, name='export_survey_json'),
     path('about/', views.about, name='about'),
 

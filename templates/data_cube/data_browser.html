@@ -18,15 +18,49 @@
             Export
         </div>
         <p class="text-muted mb-3">
-            Joins the 7 sensor tables on their shared <code>id</code> column and uses
-            GNSS latitude/longitude as point geometry (GeoPackage for QGIS/ArcGIS).
+            Joins the 7 sensor tables on their shared <code>id</code> column into a
+            single CSV file. Optionally pick a date range to limit the exported records.
         </p>
-        <a href="{% url 'export_gpkg' %}" class="btn btn-pace-mint">
-            <i class="bi bi-file-earmark-zip-fill"></i> Export Sensor Data (GPKG)
-        </a>
-        <a href="{% url 'export_survey_json' %}" class="btn btn-pace-mint ms-2">
+        <button type="button" class="btn btn-pace-mint" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="csv">
+            <i class="bi bi-file-earmark-spreadsheet-fill"></i> Export Sensor Data (CSV)
+        </button>
+        <button type="button" class="btn btn-pace-mint ms-2" data-bs-toggle="modal" data-bs-target="#exportModal" data-export-target="survey">
             <i class="bi bi-file-earmark-text-fill"></i> Export Survey Data (JSON)
-        </a>
+        </button>
+    </div>
+
+    <!-- Date Range Export Modal -->
+    <div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exportModalLabel">Export Data</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="exportForm" method="get">
+                    <div class="modal-body">
+                        <p class="text-muted">
+                            Leave both fields blank to export <strong>all</strong> records, or pick a
+                            start and/or end date to restrict the export to that timeframe (inclusive).
+                        </p>
+                        <div class="mb-3">
+                            <label for="exportStart" class="form-label">Start date</label>
+                            <input type="date" id="exportStart" name="start" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="exportEnd" class="form-label">End date</label>
+                            <input type="date" id="exportEnd" name="end" class="form-control">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-pace-outline" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-pace-mint" id="exportSubmit">
+                            <i class="bi bi-download"></i> Download
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- Tabs -->
@@ -89,5 +123,37 @@
         });
         clickedBtn.classList.add('active');
     }
+
+    (function () {
+        var exportModal = document.getElementById('exportModal');
+        var exportForm = document.getElementById('exportForm');
+        var exportStart = document.getElementById('exportStart');
+        var exportEnd = document.getElementById('exportEnd');
+        var exportSubmit = document.getElementById('exportSubmit');
+
+        // URLs resolved server-side so we don't hardcode paths.
+        var urls = {
+            csv: "{% url 'export_csv' %}",
+            survey: "{% url 'export_survey_json' %}"
+        };
+
+        exportModal.addEventListener('show.bs.modal', function (event) {
+            var target = event.relatedTarget.getAttribute('data-export-target');
+            exportForm.action = urls[target] || urls.csv;
+            exportSubmit.innerHTML = (target === 'survey')
+                ? '<i class="bi bi-download"></i> Download JSON'
+                : '<i class="bi bi-download"></i> Download CSV';
+        });
+
+        // Validate that start <= end before submitting.
+        exportForm.addEventListener('submit', function (e) {
+            var s = exportStart.value;
+            var en = exportEnd.value;
+            if (s && en && s > en) {
+                e.preventDefault();
+                alert('Start date must be before or equal to the end date.');
+            }
+        });
+    })();
 </script>
 {% endblock %}

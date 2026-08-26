@@ -53,7 +53,7 @@ services:
              echo 'Database is ready, running migrations...' && 
              python manage.py migrate --noinput && 
              echo 'Starting Gunicorn server...' && 
-             gunicorn pace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2"
+             gunicorn pace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 120 --graceful-timeout 120"
     volumes:
       - .:/code
       - ./data/media:/code/media

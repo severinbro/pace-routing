@@ -2,20 +2,17 @@
 Export helpers for the sensor and survey data.
 
 Joins the 7 sensor tables on their shared "id" primary key (they are all
-written together per sensor reading, see save_sensor_data.py) and uses the
-GNSS latitude/longitude columns as point geometry, producing a GeoPackage
-(.gpkg) that can be opened directly in QGIS/ArcGIS.
+written together per sensor reading, see save_sensor_data.py) and exports
+the joined result as a CSV file.
 
 Also provides a JSON export of all EnvironmentSurvey responses.
 """
 import tempfile
 import os
 import json
-from datetime import datetime
+from datetime import datetime, time
 
 import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
 
 from .models import (
     GNSSPhoneMeasurement,
@@ -28,28 +25,70 @@ from .models import (
 )
 
 
-def build_sensor_geodataframe():
-    """Builds a GeoDataFrame joining all sensor tables on id.
+def _parse_date_range(start=None, end=None):
+    """Parses optional ISO date strings (YYYY-MM-DD) into datetime bounds.
 
-    GNSSPhoneMeasurement is the base table (it provides the geometry), the other
-    tables are left-joined onto it by id so every row keeps a valid point.
+    Returns a (start_dt, end_dt) tuple where either element may be None.
+    The end bound is moved to the end of that day (23:59:59) so the range is
+    inclusive of the whole selected day.
     """
+    start_dt = None
+    end_dt = None
+    if start:
+        try:
+            start_dt = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            start_dt = None
+    if end:
+        try:
+            end_dt = datetime.combine(
+                datetime.strptime(end, '%Y-%m-%d').date(),
+                time(23, 59, 59),
+            )
+        except ValueError:
+            end_dt = None
+    return start_dt, end_dt
+
+
+def build_sensor_dataframe(start=None, end=None):
+    """Builds a DataFrame joining all sensor tables on id.
+
+    GNSSPhoneMeasurement is the base table, the other tables are left-joined
+    onto it by id so every row is kept.
+
+    Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
+    to records whose timestamp falls within the (inclusive) date range.
+    """
+    start_dt, end_dt = _parse_date_range(start, end)
+
+    gnss_qs = GNSSPhoneMeasurement.objects.all()
+    if start_dt:
+        gnss_qs = gnss_qs.filter(timestamp__gte=start_dt)
+    if end_dt:
+        gnss_qs = gnss_qs.filter(timestamp__lte=end_dt)
+
     gnss_df = pd.DataFrame.from_records(
-        GNSSPhoneMeasurement.objects.values(
+        gnss_qs.values(
             'id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites'
         )
     )
 
     if gnss_df.empty:
-        # Still return a well-formed, empty GeoDataFrame with the right schema.
-        return gpd.GeoDataFrame(
-            columns=['id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites'],
-            geometry=[],
-            crs='EPSG:4326',
+        # Still return a well-formed, empty DataFrame with the right schema.
+        return pd.DataFrame(
+            columns=['id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites']
         )
 
     # Only non-GNSS sensor tables are joined onto the phone GNSS base table.
     # The GNSS sensor (SAM-M10Q) measurements are excluded from the GPKG export.
+    # When a date range is applied, restrict the joined tables to the same
+    # window so stale rows from outside the range don't leak in via the merge.
+    range_filters = {}
+    if start_dt:
+        range_filters['timestamp__gte'] = start_dt
+    if end_dt:
+        range_filters['timestamp__lte'] = end_dt
+
     joins = [
         (AtmosphericMeasurement, ['temperature', 'humidity', 'pressure'], None),
         (AccelerometerMeasurement, ['accX', 'accY', 'accZ', 'angleX', 'angleY', 'angleZ'], None),
@@ -60,7 +99,10 @@ def build_sensor_geodataframe():
 
     merged = gnss_df
     for model, fields, rename_map in joins:
-        df = pd.DataFrame.from_records(model.objects.values('id', *fields))
+        qs = model.objects.all()
+        if range_filters:
+            qs = qs.filter(**range_filters)
+        df = pd.DataFrame.from_records(qs.values('id', *fields))
         if df.empty:
             for field in (rename_map or fields):
                 merged[field] = None
@@ -77,44 +119,49 @@ def build_sensor_geodataframe():
     merged['latitude'] = merged['latitude'].astype(float)
     merged['longitude'] = merged['longitude'].astype(float)
 
-    geometry = [Point(lon, lat) for lon, lat in zip(merged['longitude'], merged['latitude'])]
-    gdf = gpd.GeoDataFrame(merged, geometry=geometry, crs='EPSG:4326')
-    return gdf
+    return merged
 
 
-def write_sensor_gpkg():
-    """Writes the joined sensor GeoDataFrame to a temporary .gpkg file.
+def write_sensor_csv(start=None, end=None):
+    """Writes the joined sensor DataFrame to a temporary .csv file.
+
+    Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
+    to the given (inclusive) date range.
 
     Returns the absolute path to the written file; caller is responsible
     for cleaning it up after use.
     """
-    gdf = build_sensor_geodataframe()
+    df = build_sensor_dataframe(start=start, end=end)
 
-    # Datetimes aren't well supported by the GPKG driver in all combos;
-    # convert to ISO strings to keep the export robust.
-    if 'timestamp' in gdf.columns:
-        gdf['timestamp'] = gdf['timestamp'].astype(str)
+    # Convert datetimes to ISO strings for a stable, readable CSV.
+    if 'timestamp' in df.columns:
+        df['timestamp'] = df['timestamp'].astype(str)
 
-    fd, path = tempfile.mkstemp(suffix='.gpkg')
-    os.close(fd)
-    # mkstemp creates the file; GDAL wants to create it itself.
-    os.remove(path)
-
-    gdf.to_file(path, driver='GPKG', layer='sensor_measurements')
+    fd, path = tempfile.mkstemp(suffix='.csv')
+    with os.fdopen(fd, 'w', newline='') as f:
+        df.to_csv(f, index=False)
     return path
 
 
 def export_filename():
-    return f"pace_sensor_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.gpkg"
+    return f"pace_sensor_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
 
-def build_survey_json():
+def build_survey_json(start=None, end=None):
     """Builds a list of dicts, one per EnvironmentSurvey response.
 
     Each entry contains the survey id, timestamp, username, all 11 responses,
     and the id of the linked GNSS phone snapshot.
+
+    Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
+    to the given (inclusive) date range.
     """
+    start_dt, end_dt = _parse_date_range(start, end)
     surveys = EnvironmentSurvey.objects.select_related('user').order_by('id')
+    if start_dt:
+        surveys = surveys.filter(timestamp__gte=start_dt)
+    if end_dt:
+        surveys = surveys.filter(timestamp__lte=end_dt)
     entries = []
     for s in surveys:
         entries.append({
@@ -132,13 +179,16 @@ def build_survey_json():
     return entries
 
 
-def write_survey_json():
+def write_survey_json(start=None, end=None):
     """Writes the survey data to a temporary .json file.
+
+    Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
+    to the given (inclusive) date range.
 
     Returns the absolute path to the written file; caller is responsible
     for cleaning it up after use.
     """
-    entries = build_survey_json()
+    entries = build_survey_json(start=start, end=end)
     fd, path = tempfile.mkstemp(suffix='.json')
     with os.fdopen(fd, 'w') as f:
         json.dump(entries, f, indent=2)

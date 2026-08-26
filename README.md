@@ -112,7 +112,7 @@ Only admin (`is_staff`) accounts may push GNSS fixes, so participant phones neve
 | `/map/` | admin | Offline Leaflet map (tiles from `pace_tiles`) |
 | `/dashboard/` | admin | Live sensor telemetry grid (AJAX to `/api/latest-sensors/`) |
 | `/data-browser/` | admin | Tabbed CMS-style tables of the last 200 rows per sensor |
-| `/export-gpkg/` | admin | Download all sensor data as a GeoPackage (7 tables, QGIS/ArcGIS ready) |
+| `/export-csv/` | admin | Download all sensor data as a CSV (7 tables joined) |
 | `/export-survey-json/` | admin | Download all survey responses as JSON (one entry per survey) |
 | `/api/latest-sensors/` | public | JSON snapshot of the latest Redis sensor reading |
 | `/api/update-gnss/` | admin (POST) | Receive phone GNSS fix + sync Pi system clock |
@@ -128,9 +128,9 @@ The environmental survey (`EnvironmentSurvey` model) is served at the root URL `
 
 On submission, the current phone GNSS fix is read from Redis and saved as a `GNSSPhoneMeasurement`, which is linked to the survey via a `OneToOneField` (`gnss_snapshot`). This lets you later join each survey response to the exact sensor state at that moment.
 
-### GeoPackage export
+### Sensor CSV export
 
-`/export-gpkg/` joins all 7 sensor tables on their shared `id` primary key (they are written together per reading by `save_sensor_data.py`), uses the phone GNSS latitude/longitude as point geometry, and streams a `.gpkg` file that opens directly in QGIS or ArcGIS. The sensor GNSS table (`GNSSSensorMeasurement`) is included as additional columns alongside the phone GNSS geometry.
+`/export-csv/` joins all 7 sensor tables on their shared `id` primary key (they are written together per reading by `save_sensor_data.py`) and streams a `.csv` file. The sensor GNSS table (`GNSSSensorMeasurement`) is included as additional columns alongside the phone GNSS fields.
 
 ### Survey JSON export
 
@@ -257,7 +257,7 @@ Only the admin phone provides GNSS data — participant phones do not interfere.
 
 ## Data model
 
-All sensor and survey data lives in PostgreSQL. Tables are written together per reading (sharing an `id`), which makes the GeoPackage export a simple join.
+All sensor and survey data lives in PostgreSQL. Tables are written together per reading (sharing an `id`), which makes the CSV export a simple join.
 
 | Model | Source | Key fields |
 |-------|--------|------------|
