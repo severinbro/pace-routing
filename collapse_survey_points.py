@@ -183,7 +183,18 @@ class SurveyCluster:
         """
         if not self._timestamps or not self.gnss_ids:
             return self.gnss_ids[0] if self.gnss_ids else None
-        target = median(self._timestamps)
+        # Compute the median timestamp manually because statistics.median()
+        # tries to add two datetimes when the count is even, which raises
+        # TypeError: unsupported operand type(s) for +: 'datetime' and 'datetime'.
+        sorted_ts = sorted(self._timestamps)
+        n = len(sorted_ts)
+        if n % 2 == 1:
+            target = sorted_ts[n // 2]
+        else:
+            # For an even count, use the midpoint between the two middle values.
+            mid_lo = sorted_ts[n // 2 - 1]
+            mid_hi = sorted_ts[n // 2]
+            target = mid_lo + (mid_hi - mid_lo) / 2
         # Pair each survey's gnss id with its timestamp distance from the median.
         best_id, best_delta = None, None
         for s in self.surveys:
