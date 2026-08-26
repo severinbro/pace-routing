@@ -80,8 +80,6 @@
 
         <hr>
 
-        <hr>
-
         <!-- Abort campaign -->
         <div>
             <label class="form-label text-danger">Abort Campaign</label>
@@ -107,7 +105,24 @@
                 document.getElementById('controls-card').style.display = active ? 'block' : 'none';
                 document.getElementById('start-card').style.display = active ? 'none' : 'block';
 
+                const statusArea = document.getElementById('campaign-status-area');
                 if (active) {
+                    // Rebuild the active status display if it was previously cleared.
+                    if (!document.getElementById('current-stop')) {
+                        statusArea.innerHTML =
+                            '<div class="d-flex align-items-center gap-3 flex-wrap">' +
+                            '  <span class="pace-badge" style="background: var(--pace-mint); color: var(--pace-ink);">' +
+                            '    <i class="bi bi-record-circle"></i> Active' +
+                            '  </span>' +
+                            '  <span class="fw-bold">Stop <span id="current-stop"></span> / <span id="total-stops"></span></span>' +
+                            '  <div class="flex-grow-1">' +
+                            '    <div class="progress" style="height: 24px; border: 2px solid var(--pace-border);">' +
+                            '      <div class="progress-bar" id="campaign-progress" role="progressbar"' +
+                            '           style="background: var(--pace-coral); width: 0%;"></div>' +
+                            '    </div>' +
+                            '  </div>' +
+                            '</div>';
+                    }
                     document.getElementById('current-stop').textContent = state.current_stop;
                     document.getElementById('total-stops').textContent = state.total_stops;
                     const pct = state.total_stops > 0 ? (state.current_stop / state.total_stops * 100) : 0;
@@ -118,7 +133,14 @@
                     document.getElementById('unlock-btn').disabled = allDone;
                     if (allDone) {
                         document.getElementById('unlock-btn').innerHTML = '<i class="bi bi-check-circle-fill"></i> All Stops Unlocked';
+                    } else {
+                        document.getElementById('unlock-btn').innerHTML =
+                            '<i class="bi bi-unlock-fill"></i> Unlock Stop <span id="next-stop-num">' +
+                            (state.current_stop + 1) + '</span>';
                     }
+                } else {
+                    // Campaign inactive — show the "no active campaign" message.
+                    statusArea.innerHTML = '<p class="text-muted mb-0">No active campaign. Configure a new one below.</p>';
                 }
             })
             .catch(err => console.error('Status refresh failed:', err));
