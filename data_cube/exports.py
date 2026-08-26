@@ -237,6 +237,14 @@ def build_sensor_dataframe(start=None, end=None):
     merged['latitude'] = merged['latitude'].astype(float)
     merged['longitude'] = merged['longitude'].astype(float)
 
+    # Drop rows with invalid GPS fixes (no satellite lock — lat/lon both 0).
+    # These represent readings where the phone had no position and including
+    # them pollutes the export and distorts route downsampling.
+    invalid_gps = (merged['latitude'] == 0.0) & (merged['longitude'] == 0.0)
+    if invalid_gps.any():
+        print(f"[exports] Dropping {invalid_gps.sum()} row(s) with invalid GPS (0,0).")
+        merged = merged[~invalid_gps].reset_index(drop=True)
+
     # Replace statistically significant outliers in the continuous sensor
     # measurements with the previous valid value (forward-fill) before the
     # dataframe is handed to the CSV exporter (or any other consumer). GNSS
@@ -511,6 +519,89 @@ def _collapse_route(sensors_df, clusters,
     return combined.drop(columns=['_is_stop', '_cluster_id'])
 
 
+def _collapse_stops_only(sensors_df, clusters,
+                         spatial_threshold=STOP_SPATIAL_THRESHOLD_M,
+                         time_buffer=STOP_TIME_BUFFER_S):
+    """Collapses survey-stop points but keeps ALL non-stop readings.
+
+    Unlike :func:`_collapse_route`, this function does **not** downsample the
+    non-stop route points — every sensor reading between stops is kept so the
+    export is a complete data export rather than a route visualization.
+
+    Steps:
+      1. Mark every route point that belongs to a survey stop.
+      2. Collapse each stop's points into one representative row.
+      3. Keep all non-stop points unchanged.
+      4. Concatenate, sort by timestamp, return.
+    """
+    if sensors_df.empty:
+        return sensors_df.copy()
+
+    df = sensors_df.sort_values('timestamp').reset_index(drop=True).copy()
+    df['_is_stop'] = False
+    df['_cluster_id'] = -1
+
+    # 1. Mark stop points.
+    for idx, cluster in enumerate(clusters):
+        pid = cluster.primary_gnss_id
+        if pid is None or math.isnan(cluster.centroid_lat):
+            continue
+        clat, clon = cluster.centroid_lat, cluster.centroid_lon
+        t0 = cluster.start_ts - timedelta(seconds=time_buffer) if cluster.start_ts else None
+        t1 = cluster.end_ts + timedelta(seconds=time_buffer) if cluster.end_ts else None
+
+        for i, row in df.iterrows():
+            if df.at[i, '_is_stop']:
+                continue
+            ts = row['timestamp']
+            if t0 is not None and t1 is not None:
+                if pd.isna(ts) or ts < t0 or ts > t1:
+                    continue
+            d = haversine(row['latitude'], row['longitude'], clat, clon)
+            if d <= spatial_threshold:
+                df.at[i, '_is_stop'] = True
+                df.at[i, '_cluster_id'] = idx
+
+    # 2. Collapse stop points.
+    collapsed_rows = []
+    for idx, cluster in enumerate(clusters):
+        pid = cluster.primary_gnss_id
+        if pid is None:
+            continue
+        stop_rows = df[df['_cluster_id'] == idx]
+        if stop_rows.empty:
+            pt = cluster.surveys[0].get('_gnss_point')
+            if pt is None:
+                continue
+            row = {c: None for c in df.columns}
+            row['id'] = pid
+            row['latitude'] = pt['latitude']
+            row['longitude'] = pt['longitude']
+            row['timestamp'] = pt['timestamp']
+            row['_is_stop'] = True
+            row['_cluster_id'] = idx
+            collapsed_rows.append(pd.Series(row))
+        else:
+            collapsed_rows.append(_collapse_rows(stop_rows, pid))
+
+    # 3. Keep ALL non-stop points (no downsampling).
+    non_stop = df[~df['_is_stop']].copy()
+
+    # 4. Combine & sort.
+    parts = []
+    if collapsed_rows:
+        parts.append(pd.DataFrame(collapsed_rows, columns=df.columns))
+    if not non_stop.empty:
+        parts.append(non_stop)
+
+    if not parts:
+        return df.drop(columns=['_is_stop', '_cluster_id'])
+
+    combined = pd.concat(parts, ignore_index=True)
+    combined = combined.sort_values('timestamp').reset_index(drop=True)
+    return combined.drop(columns=['_is_stop', '_cluster_id'])
+
+
 def _relink_surveys(surveys, clusters):
     """Returns a copy of the survey entries with unified ``gnss_snapshot_id``.
 
@@ -536,13 +627,13 @@ def _relink_surveys(surveys, clusters):
 
 
 def write_sensor_csv(start=None, end=None):
-    """Writes the collapsed route DataFrame to a temporary .csv file.
+    """Writes the sensor DataFrame to a temporary .csv file.
 
-    Survey stops are collapsed into a single representative point and the
-    remaining route is downsampled to roughly one point every
-    :data:`ROUTE_MIN_SPACING_M` metres, so the CSV contains continuous points
-    (one per ~5 m) with matching sensor measurements instead of dense
-    stationary blobs at each stop.
+    Survey stops are collapsed into a single representative point (so multiple
+    participants at the same stop share one GNSS id).  All other sensor
+    readings are exported **as-is** — every measurement is included, not just
+    one every 5 m — so the CSV is a complete data export, not a downsampled
+    route visualization.
 
     Optional ``start``/``end`` (ISO ``YYYY-MM-DD`` strings) restrict the export
     to the given (inclusive) date range.
@@ -555,7 +646,10 @@ def write_sensor_csv(start=None, end=None):
 
     gnss_lookup = _build_gnss_lookup(df)
     clusters = _cluster_surveys(surveys, gnss_lookup)
-    route = _collapse_route(df, clusters)
+
+    # Collapse survey-stop points into one representative row each, but keep
+    # ALL non-stop readings (no downsampling) so the export is complete.
+    route = _collapse_stops_only(df, clusters)
 
     # Convert datetimes to ISO strings for a stable, readable CSV.
     if 'timestamp' in route.columns:
