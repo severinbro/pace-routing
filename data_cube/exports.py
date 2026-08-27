@@ -735,12 +735,18 @@ def survey_export_filename():
 # Weather enrichment export (Open-Meteo)
 # --------------------------------------------------------------------------- #
 def write_weather_csv(start=None, end=None):
-    """Writes a weather-enriched measurements CSV using Open-Meteo data.
+    """Writes a weather CSV (GNSS locations + Open-Meteo data) only.
 
     Builds the same collapsed route DataFrame as :func:`write_sensor_csv`,
-    then enriches every row with Open-Meteo weather variables
+    but keeps **only** the GNSS location columns
+    (``id``, ``timestamp``, ``latitude``, ``longitude``, ``altitude``,
+    ``satellites``) and enriches every row with Open-Meteo weather variables
     (``temperature_2m``, ``relative_humidity_2m``, ``surface_pressure``)
     matched to the row's GNSS coordinates and timestamp.
+
+    Sensor measurements (temperature, humidity, pressure, accelerometer,
+    air quality, particulate, noise) are intentionally excluded — they belong
+    to the measurements export (:func:`write_sensor_csv`).
 
     Requires an internet connection to reach the Open-Meteo API.
 
@@ -757,6 +763,11 @@ def write_weather_csv(start=None, end=None):
         if os.path.exists(sensor_path):
             os.remove(sensor_path)
         raise
+
+    # Keep only the GNSS location columns — sensor measurements belong in the
+    # measurements export, not the weather export.
+    location_cols = ['id', 'timestamp', 'latitude', 'longitude', 'altitude', 'satellites']
+    df = df[[c for c in location_cols if c in df.columns]]
 
     valid = df.dropna(subset=['latitude', 'longitude', 'timestamp']).copy()
     if valid.empty:
@@ -826,22 +837,29 @@ def weather_export_filename():
 # --------------------------------------------------------------------------- #
 # Amenities export (OpenStreetMap Overpass)
 # --------------------------------------------------------------------------- #
+# Amenity query radius (metres) — used for the per-stop haversine cutoff.
+_AMENITY_RADIUS_M = 100.0
+
+
 def write_amenities_csv(start=None, end=None):
     """Writes a CSV of amenity counts per survey stop via OpenStreetMap.
 
     For every unique survey stop location (identified by the shared
-    ``gnss_snapshot_id``), queries OpenStreetMap via the Overpass API and
-    records the number of distinct ``amenity=*`` types found within a 100 m
-    radius.
+    ``gnss_snapshot_id``), records the number of distinct ``amenity=*``
+    types found within a 100 m radius.
+
+    All stops are fetched in a **single** Overpass bounding-box request and
+    then filtered locally by haversine distance, so the export makes exactly
+    one network round-trip regardless of how many stops the campaign contains.
+    The previous per-stop approach issued one Overpass call per stop, which
+    with several stops (and 5 retries each) exceeded both Gunicorn's worker
+    timeout and Nginx's ``proxy_read_timeout``, producing a 504.
 
     Requires an internet connection to reach the Overpass API.
 
     Returns the absolute path to the written file; caller is responsible
     for cleaning it up after use.
     """
-    import extract_amenities as _ea
-
-    # Build the survey stop locations from the collapsed route + survey JSON.
     surveys = build_survey_json(start=start, end=end)
     df = build_sensor_dataframe(start=start, end=end)
     gnss_lookup = _build_gnss_lookup(df)
@@ -858,20 +876,29 @@ def write_amenities_csv(start=None, end=None):
             continue
         stops.append((pid, pt['latitude'], pt['longitude']))
 
-    overpass_url = 'https://overpass-api.de/api/interpreter'
-    radius = 100.0
+    if not stops:
+        # No survey stops: write a header-only CSV.
+        fd, path = tempfile.mkstemp(suffix='.csv')
+        with os.fdopen(fd, 'w', newline='') as f:
+            import csv as _csv
+            fieldnames = ['gnss_snapshot_id', 'latitude', 'longitude', 'unique_amenity_types']
+            _csv.DictWriter(f, fieldnames=fieldnames).writeheader()
+        return path
+
+    # Fetch every amenity in a single bounding-box query, then filter locally.
+    amenities = _fetch_amenities_bbox(stops, _AMENITY_RADIUS_M)
 
     rows = []
     for gid, lat, lon in stops:
-        try:
-            amenity_count = _count_unique_amenity_types(lat, lon, radius, overpass_url)
-        except Exception:
-            amenity_count = None
+        types = set()
+        for a_lat, a_lon, a_type in amenities:
+            if haversine(lat, lon, a_lat, a_lon) <= _AMENITY_RADIUS_M:
+                types.add(a_type)
         rows.append({
             'gnss_snapshot_id': gid,
             'latitude': lat,
             'longitude': lon,
-            'unique_amenity_types': amenity_count,
+            'unique_amenity_types': len(types) if types else 0,
         })
 
     fd, path = tempfile.mkstemp(suffix='.csv')
@@ -885,21 +912,43 @@ def write_amenities_csv(start=None, end=None):
     return path
 
 
-def _count_unique_amenity_types(lat, lon, radius, url):
-    """Number of distinct ``amenity=*`` values within ``radius`` metres."""
+def _fetch_amenities_bbox(stops, radius):
+    """Fetches all ``amenity=*`` elements within a bounding box covering ``stops``.
+
+    Returns a list of ``(latitude, longitude, amenity_type)`` tuples for every
+    amenity node (or way centroid) returned by Overpass.  The bounding box is
+    padded by ``radius`` metres (with slack for latitude stretching) so amenities
+    sitting just outside the raw stop extents are still included; the exact
+    per-stop cutoff is applied later by the haversine filter in
+    :func:`write_amenities_csv`.
+    """
     import urllib.request, urllib.parse, json as _json, time as _time
 
-    query = """
-[out:json][timeout:60];
-(
-  node(around:{radius},{lat},{lon})["amenity"];
-  way(around:{radius},{lat},{lon})["amenity"];
-);
-out center tags;
-""".format(lat=lat, lon=lon, radius=int(radius))
+    lats = [s[1] for s in stops]
+    lons = [s[2] for s in stops]
+    # Convert the radius in metres to a degree pad (1 deg ~= 111 km), with 1.5x
+    # slack for cos(latitude) stretching at higher latitudes.
+    pad = (radius / 111_000.0) * 1.5
+    min_lat, max_lat = min(lats) - pad, max(lats) + pad
+    min_lon, max_lon = min(lons) - pad, max(lons) + pad
+
+    # Overpass bbox order is (south, west, north, east) = (min_lat, min_lon, max_lat, max_lon).
+    bbox = f"{min_lat},{min_lon},{max_lat},{max_lon}"
+    query = (
+        "[out:json][timeout:60];\n"
+        "(\n"
+        "  node[\"amenity\"]({bbox});\n"
+        "  way[\"amenity\"]({bbox});\n"
+        ");\n"
+        "out center tags;"
+    ).format(bbox=bbox)
 
     data_str = ('data=' + urllib.parse.quote(query)).encode('utf-8')
-    req = urllib.request.Request(url, data=data_str, headers={'User-Agent': 'PACE-amenities/1.0'})
+    overpass_url = 'https://overpass-api.de/api/interpreter'
+    req = urllib.request.Request(
+        overpass_url, data=data_str,
+        headers={'User-Agent': 'PACE-amenities/1.0'},
+    )
 
     max_retries = 5
     last_err = None
@@ -907,17 +956,27 @@ out center tags;
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = _json.loads(resp.read().decode('utf-8'))
-            types = set()
+            amenities = []
             for el in data.get('elements', []):
                 tags = el.get('tags', {})
                 amenity = tags.get('amenity')
-                if amenity:
-                    types.add(amenity)
-            return len(types)
+                if not amenity:
+                    continue
+                if el.get('type') == 'way':
+                    lat = el.get('center', {}).get('lat')
+                    lon = el.get('center', {}).get('lon')
+                else:
+                    lat = el.get('lat')
+                    lon = el.get('lon')
+                if lat is not None and lon is not None:
+                    amenities.append((float(lat), float(lon), amenity))
+            return amenities
         except Exception as e:
             last_err = e
             _time.sleep(2 ** attempt)
-    raise RuntimeError(f'Overpass request failed after {max_retries} attempts: {last_err}')
+    raise RuntimeError(
+        f'Overpass request failed after {max_retries} attempts: {last_err}'
+    )
 
 
 def amenities_export_filename():

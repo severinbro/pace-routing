@@ -24,6 +24,7 @@ urlpatterns = [
     path('campaign/unlock-stop/', views.campaign_unlock_stop, name='campaign_unlock_stop'),
     path('campaign/toggle-collect/', views.campaign_toggle_collect, name='campaign_toggle_collect'),
     path('campaign/status/', views.campaign_status, name='campaign_status'),
+    path('campaign/poweroff/', views.campaign_poweroff, name='campaign_poweroff'),
 
     # --- AUTH & LANDING ---
     # Custom login view redirects admin -> admin_home, non-admin -> surveys_tab

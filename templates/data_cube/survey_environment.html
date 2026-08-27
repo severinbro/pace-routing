@@ -53,8 +53,13 @@
         </div>
     </div>
     <script>
-        // Auto-refresh every 5 seconds so participants see the survey as soon as it's unlocked.
-        setTimeout(function() { window.location.reload(); }, 5000);
+        // Auto-refresh every 5 seconds so participants see the survey as soon
+        // as the next stop is unlocked. Reload to the bare survey URL (without
+        // any ?waiting=1 / ?done=1 query string) so that once the next stop is
+        // unlocked the waiting flag clears and the survey form appears.
+        setTimeout(function () {
+            window.location.href = "{% url 'surveys_tab' %}";
+        }, 5000);
     </script>
 
     {% else %}
@@ -201,8 +206,8 @@
                     </a>
                     {% else %}
                     <p class="text-muted mb-4">Your responses have been recorded.</p>
-                    <a href="{% url 'surveys_tab' %}?waiting=1" class="btn btn-pace-primary btn-lg py-3 px-5">
-                        <i class="bi bi-arrow-right-circle-fill"></i> Next
+                    <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary btn-lg py-3 px-5">
+                        <i class="bi bi-arrow-right-circle-fill"></i> Continue
                     </a>
                     {% endif %}
                 </div>

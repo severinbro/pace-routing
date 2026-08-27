@@ -146,6 +146,22 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: none !important;
     padding: 0.5rem 0;
 }
+/* Allow horizontal scrolling when the nav items overflow on small screens.
+   Items never wrap or shrink so each icon stays fully visible/tappable. */
+.pace-navbar .navbar-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+    scrollbar-width: none;             /* Firefox: hide scrollbar */
+}
+.pace-navbar .navbar-nav::-webkit-scrollbar {
+    display: none;                     /* WebKit: hide scrollbar */
+}
+.pace-navbar .nav-item,
+.pace-navbar .navbar-nav > form {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
 .pace-navbar .nav-link {
     color: rgba(255,255,255,0.7) !important;
     font-weight: 700;

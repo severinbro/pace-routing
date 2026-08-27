@@ -381,6 +381,29 @@ def campaign_status(request):
     """Returns the current campaign state as JSON (for AJAX polling)."""
     return JsonResponse(campaign_state())
 
+@staff_member_required(login_url='admin_login')
+def campaign_poweroff(request):
+    """Powers off the host machine (Raspberry Pi 5).
+
+    The web container runs in privileged mode, so writing 'o' (poweroff)
+    to /proc/sysrq-trigger is forwarded to the host kernel and immediately
+    powers down the device.  Intended for a controlled "Switch Off" from
+    the campaign hub after a double confirmation from the user.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    logger.warning('Poweroff requested by user %s — shutting down host.',
+                   request.user.username)
+    try:
+        with open('/proc/sysrq-trigger', 'w') as trigger:
+            trigger.write('o')
+    except OSError as exc:
+        logger.error('Poweroff failed: %s', exc)
+        return JsonResponse({'error': 'Poweroff failed: ' + str(exc)}, status=500)
+    # The host powers off immediately, so this response may never arrive —
+    # the client shows a farewell message and the page simply goes blank.
+    return JsonResponse({'shutting_down': True})
+
 # --- ADMIN-ONLY: CREATE NON-ADMIN USER ---
 @staff_member_required(login_url='admin_login')
 def create_user(request):
@@ -500,17 +523,21 @@ def surveys_tab(request):
 
     # Determine which screen to show:
     #   - campaign complete (all stops done)
+    #   - thank-you / phase-4 (just submitted via ?done=1, not waiting, not complete)
     #   - waiting (no stop unlocked yet, or participant already submitted this stop)
-    #   - survey form (stop unlocked)
+    #   - survey form (stop unlocked and not yet submitted by this participant)
     campaign_complete = (campaign_complete_flag or
                          (state['active'] and state['current_stop'] >= state['total_stops'] and state['total_stops'] > 0))
-    # The thank-you "Next" button passes waiting=1 so the participant sees the
-    # waiting screen instead of the same survey form again. The admin must
-    # unlock the next stop before the form reappears.
+    # A stop is "done for this participant" if it has already been submitted.
+    # The current stop is unlocked (current_stop > 0) but once it's in the
+    # submitted set we must keep showing the waiting screen so the form can't
+    # be submitted twice. The admin then unlocks the *next* stop, at which
+    # point current_stop is no longer in submitted_stops and the form returns.
+    current_submitted = state['active'] and state['current_stop'] in set(state.get('submitted_stops', []))
     if force_waiting:
         waiting = True
     else:
-        waiting = not state['active'] or state['current_stop'] == 0
+        waiting = (not state['active']) or state['current_stop'] == 0 or current_submitted
 
     return render(request, 'data_cube/survey_environment.html', {
         'phase1_features': phase1_features,

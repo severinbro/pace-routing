@@ -92,6 +92,21 @@
             </button>
         </div>
     </div>
+
+    <!-- Switch Off (power down host) -->
+    <div class="pace-card p-4 mb-4 border-danger-subtle" style="border: 2px solid var(--pace-coral);">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-power"></i></div>
+            Power
+        </div>
+        <p class="text-muted small mb-3">
+            Switch off the field unit. This powers down the Raspberry Pi and
+            stops all sensor collection, the map server and the web app.
+        </p>
+        <button type="button" class="btn btn-outline-danger btn-lg" id="poweroff-btn">
+            <i class="bi bi-power"></i> Switch Off
+        </button>
+    </div>
 </div>
 
 <script>
@@ -214,6 +229,33 @@
         .then(res => res.json())
         .then(() => refreshStatus())
         .catch(err => console.error('Abort failed:', err));
+    });
+
+    // Switch Off — double confirmation before powering down the host.
+    document.getElementById('poweroff-btn').addEventListener('click', function() {
+        const first = confirm('Switch off the field unit?\n' +
+                              'This will power down the Raspberry Pi and stop all services.');
+        if (!first) return;
+        const second = confirm('Are you absolutely sure?\n' +
+                               'The system will power off immediately and cannot be stopped once started.');
+        if (!second) return;
+        fetch('{% url "campaign_poweroff" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.shutting_down) {
+                alert('The system is switching off now.\nYou may safely disconnect power once the lights go off.');
+            } else if (data.error) {
+                alert('Switch off failed: ' + data.error);
+            }
+        })
+        .catch(err => {
+            console.error('Poweroff request failed:', err);
+            alert('Switch off request could not be completed. ' +
+                  'The host may already be shutting down.');
+        });
     });
 
     // Poll for status updates every 2 seconds, and refresh immediately on load.
