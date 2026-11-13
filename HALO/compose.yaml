@@ -1,0 +1,86 @@
+name: halo
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    command:
+      - sh
+      - -c
+      - mkdir -p /data/redis && exec redis-server --protected-mode no --appendonly yes --appendfsync everysec --dir /data/redis
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  capture:
+    profiles: ["manual"]
+    build:
+      context: .
+      dockerfile: docker/capture.Dockerfile
+    image: halo-camera-capture:local
+    working_dir: /tmp
+    privileged: true
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    group_add:
+      - "${PACE_VIDEO_GID:-44}"
+      - "${PACE_RENDER_GID:-105}"
+      - "${PACE_I2C_GID:-994}"
+    volumes:
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+      - /sys:/sys:ro
+      - ${PACE_DATA_DIR:-./data}:/data
+      - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+    environment:
+      HOME: /tmp
+      REDIS_HOST: redis
+    restart: "no"
+    stop_grace_period: 90s
+
+  extractor:
+    image: halo-camera-capture:local
+    build:
+      context: .
+      dockerfile: docker/capture.Dockerfile
+    entrypoint: ["bash", "/app/capture/bin/run_extractor.sh"]
+    working_dir: /tmp
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data
+      - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+    environment:
+      HOME: /tmp
+      REDIS_HOST: redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    cpus: 1.0
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  uploader:
+    image: halo-camera-capture:local
+    build:
+      context: .
+      dockerfile: docker/capture.Dockerfile
+    entrypoint: ["bash", "/app/capture/bin/run_uploader.sh"]
+    working_dir: /tmp
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data
+      - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+      - ./config/halo-upload.token:/run/secrets/halo-upload-token:ro
+      - ./config/sense-server.crt:/run/secrets/sense-ca.crt:ro
+    environment:
+      HOME: /tmp
+    depends_on:
+      extractor:
+        condition: service_started
+    cpus: 0.5
+    restart: unless-stopped
+    stop_grace_period: 30s

@@ -19,21 +19,13 @@
         <div class="navbar-nav w-100 d-flex flex-row">
 
             {% if request.user.is_authenticated and request.user.is_staff %}
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}">
-                    <i class="bi bi-map"></i>
+                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' %}active{% endif %}" href="{% url 'sense_home' %}">
+                    <i class="bi bi-cpu"></i> <span>SENSE</span>
                 </a>
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'dashboard_tab' %}active{% endif %}" href="{% url 'dashboard_tab' %}">
-                    <i class="bi bi-clipboard-data"></i>
+                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' %}active{% endif %}" href="{% url 'halo_home' %}">
+                    <i class="bi bi-camera-video"></i> <span>HALO</span>
                 </a>
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' %}active{% endif %}" href="{% url 'campaign_hub' %}">
-                    <i class="bi bi-clipboard2-data-fill"></i>
-                </a>
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'data_browser' %}active{% endif %}" href="{% url 'data_browser' %}">
-                    <i class="bi bi-database-fill"></i>
-                </a>
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'create_user' %}">
-                    <i class="bi bi-person-plus-fill"></i>
-                </a>
+                <a class="nav-item nav-link" href="{% url 'admin_home' %}" title="PACE home"><i class="bi bi-house-fill"></i></a>
             {% endif %}
 
             <a class="nav-item nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}">
@@ -72,7 +64,7 @@
 
     <!-- Smartphone GNSS Pusher: streams the admin phone's geolocation to the RPi5 -->
     <!-- Only runs for authenticated admin (is_staff) users so non-admin phones don't interfere -->
-    {% if request.user.is_authenticated and request.user.is_staff %}
+    {% if request.user.is_authenticated and request.user.is_staff and request.resolver_match.url_name != 'halo_home' and request.resolver_match.url_name != 'admin_home' %}
     <script>
     (function () {
         if (!navigator.geolocation) {

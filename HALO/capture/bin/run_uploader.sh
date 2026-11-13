@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+
+ensure_data_dirs
+SENSE_UPLOAD_HOST="${SENSE_UPLOAD_HOST:-pace-sense.local}"
+SENSE_TLS_NAME="${SENSE_TLS_NAME:-pace-sense.local}"
+SENSE_HTTPS_PORT="${SENSE_HTTPS_PORT:-443}"
+SENSE_CA_FILE="${SENSE_CA_FILE:-/run/secrets/sense-ca.crt}"
+SENSE_TOKEN_FILE="${SENSE_TOKEN_FILE:-/run/secrets/halo-upload-token}"
+UPLOAD_SCAN_SECONDS="${UPLOAD_SCAN_SECONDS:-10}"
+UPLOAD_INCLUDE_VIDEO="${UPLOAD_INCLUDE_VIDEO:-false}"
+SENSE_UPLOAD_TIMEOUT_SECONDS="${SENSE_UPLOAD_TIMEOUT_SECONDS:-600}"
+export DATA_ROOT SENSE_UPLOAD_HOST SENSE_TLS_NAME SENSE_HTTPS_PORT
+export SENSE_CA_FILE SENSE_TOKEN_FILE UPLOAD_SCAN_SECONDS UPLOAD_INCLUDE_VIDEO
+export SENSE_UPLOAD_TIMEOUT_SECONDS
+exec python3 "$SCRIPT_DIR/upload_sessions.py" "$@"

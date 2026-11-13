@@ -1,0 +1,9 @@
+data/
+config/capture.env
+config/halo-upload.token
+config/sense-server.crt
+SENSE/
+.env
+.git/
+*.log
+__pycache__/

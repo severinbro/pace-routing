@@ -1,6 +1,7 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
+from . import halo_views
 
 urlpatterns = [
     # --- TAB NAVIGATION ---
@@ -31,6 +32,12 @@ urlpatterns = [
     path('login/', views.RoleLoginView.as_view(), name='admin_login'),
     path('logout/', auth_views.LogoutView.as_view(), name='admin_logout'),
     path('admin-home/', views.admin_home, name='admin_home'),
+    path('sense/', views.sense_home, name='sense_home'),
+    path('halo/', halo_views.halo_home, name='halo_home'),
+    path('halo/api/status/', halo_views.halo_status, name='halo_status'),
+    path('halo/api/sessions/', halo_views.halo_sessions, name='halo_sessions'),
+    path('halo/api/recordings/start/', halo_views.halo_start, name='halo_start'),
+    path('halo/api/recordings/stop/', halo_views.halo_stop, name='halo_stop'),
     path('create-user/', views.create_user, name='create_user'),
     path('sign-up/', views.sign_up, name='sign_up'),
 

@@ -1,69 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="text-center mt-4">
-    <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3">
-        <i class="bi bi-house-fill"></i>
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <h1 class="fw-bold">PACE Control</h1>
+        <p class="text-muted">Choose the platform you want to work with.</p>
     </div>
-    <h2 class="fw-bold">Admin Home</h2>
-    <p class="text-muted">Signed in as <strong class="text-dark">{{ request.user.username }}</strong>.</p>
-</div>
-
-<div class="d-grid gap-4 col-lg-8 mx-auto mt-4">
-    <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
-        <div class="d-flex align-items-center">
-            <div class="pace-icon-tile pace-icon-tile-coral me-4"><i class="bi bi-clipboard-data"></i></div>
-            <div>
-                <h3 class="mb-1">Dashboard</h3>
-                <p class="mb-0 text-muted">Live sensor telemetry grid.</p>
-            </div>
+    <div class="row g-4 mx-auto" style="max-width: 1000px;">
+        <div class="col-md-6">
+            <a href="{% url 'sense_home' %}" class="pace-card pace-card-hover d-block p-4 h-100 text-decoration-none text-dark">
+                <div class="pace-icon-tile pace-icon-tile-mint mb-3"><i class="bi bi-cpu"></i></div>
+                <h2>SENSE</h2>
+                <p class="text-muted mb-0">Environmental sensors, survey campaigns, map and collected data.</p>
+            </a>
         </div>
-    </a>
-
-    <a href="{% url 'map_tab' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
-        <div class="d-flex align-items-center">
-            <div class="pace-icon-tile pace-icon-tile-sky me-4"><i class="bi bi-map"></i></div>
-            <div>
-                <h3 class="mb-1">Map</h3>
-                <p class="mb-0 text-muted">Offline OSM map with live position.</p>
-            </div>
+        <div class="col-md-6">
+            <a href="{% url 'halo_home' %}" class="pace-card pace-card-hover d-block p-4 h-100 text-decoration-none text-dark">
+                <div class="pace-icon-tile pace-icon-tile-coral mb-3"><i class="bi bi-camera-video"></i></div>
+                <h2>HALO</h2>
+                <p class="text-muted mb-0">Recording control, sensor readiness, synchronization and transfer to SENSE.</p>
+            </a>
         </div>
-    </a>
-
-    <a href="{% url 'data_browser' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
-        <div class="d-flex align-items-center">
-            <div class="pace-icon-tile pace-icon-tile-navy me-4"><i class="bi bi-database-fill"></i></div>
-            <div>
-                <h3 class="mb-1">Data</h3>
-                <p class="mb-0 text-muted">Browse database tables &amp; export CSV.</p>
-            </div>
-        </div>
-    </a>
-    <a href="{% url 'campaign_hub' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
-        <div class="d-flex align-items-center">
-            <div class="pace-icon-tile pace-icon-tile-coral me-4"><i class="bi bi-clipboard2-data-fill"></i></div>
-            <div>
-                <h3 class="mb-1">Campaign Hub</h3>
-                <p class="mb-0 text-muted">Configure & control measurement campaigns.</p>
-            </div>
-        </div>
-    </a>
-    <a href="{% url 'create_user' %}" class="btn btn-pace-outline btn-lg p-4 text-start pace-card-hover">
-        <div class="d-flex align-items-center">
-            <div class="pace-icon-tile pace-icon-tile-mint me-4"><i class="bi bi-person-plus-fill"></i></div>
-            <div>
-                <h3 class="mb-1">Create Participant</h3>
-                <p class="mb-0 text-muted">Create a new non-admin participant account.</p>
-            </div>
-        </div>
-    </a>
-</div>
-
-<div class="text-center mt-5 mb-5">
-    <form method="post" action="{% url 'admin_logout' %}" class="d-inline">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-pace-outline">
-            <i class="bi bi-box-arrow-right"></i> Sign Out
-        </button>
-    </form>
+    </div>
 </div>
 {% endblock %}

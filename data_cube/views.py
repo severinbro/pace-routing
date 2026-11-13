@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.http import JsonResponse, FileResponse
+from django.http import JsonResponse, FileResponse, HttpResponse
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.views import LoginView
 from django.contrib.auth import login
@@ -7,6 +7,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
+from django.conf import settings
 import redis, json, subprocess, logging, os
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,37 @@ def campaign_state():
 class RoleLoginView(LoginView):
     """Redirects admin users to admin_home, non-admin users to surveys_tab."""
     template_name = 'data_cube/login.html'
+
+    def _attempt_key(self):
+        address = self.request.META.get('HTTP_X_REAL_IP') or self.request.META.get('REMOTE_ADDR', 'unknown')
+        return 'login:failures:' + address
+
+    def dispatch(self, request, *args, **kwargs):
+        self.request = request
+        if request.method == 'POST':
+            try:
+                if int(r.get(self._attempt_key()) or 0) >= 5:
+                    return HttpResponse('Too many sign-in attempts. Try again in 10 minutes.', status=429)
+            except redis.RedisError:
+                logger.exception('Login rate-limit store unavailable')
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_invalid(self, form):
+        try:
+            key = self._attempt_key()
+            attempts = r.incr(key)
+            if attempts == 1:
+                r.expire(key, 600)
+        except redis.RedisError:
+            logger.exception('Login rate-limit store unavailable')
+        return super().form_invalid(form)
+
+    def form_valid(self, form):
+        try:
+            r.delete(self._attempt_key())
+        except redis.RedisError:
+            logger.exception('Login rate-limit store unavailable')
+        return super().form_valid(form)
 
     def get_success_url(self):
         user = self.request.user
@@ -293,8 +325,15 @@ def export_amenities_csv(request):
 # --- ADMIN-ONLY: LANDING PAGE AFTER SIGN IN ---
 @staff_member_required(login_url='admin_login')
 def admin_home(request):
-    """Renders the admin landing page with links to Dashboard, Map and Data."""
+    """Choose between the SENSE and HALO parts of PACE."""
     return render(request, 'data_cube/admin_home.html')
+
+
+@staff_member_required(login_url='admin_login')
+def sense_home(request):
+    return render(request, 'data_cube/sense_home.html', {
+        'hardware_available': settings.SENSE_HARDWARE_AVAILABLE,
+    })
 
 # --- ADMIN-ONLY: CAMPAIGN HUB ---
 @staff_member_required(login_url='admin_login')
@@ -642,7 +681,7 @@ def api_update_gnss(request):
 
     # --- Sync the RPi5 system clock if a UTC timestamp is provided ---
     utc_iso = payload.get('utc_time')
-    if utc_iso:
+    if utc_iso and os.environ.get('PACE_PHONE_CLOCK_SYNC', 'true').lower() == 'true':
         try:
             # Expecting ISO-8601 UTC, e.g. "2026-08-08T14:32:05.123Z"
             # Strip fractional seconds and trailing 'Z' for the `date` command.

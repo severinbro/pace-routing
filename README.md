@@ -296,3 +296,29 @@ docker compose logs -f sensor_worker
 ## License
 
 See [LICENSE](LICENSE).
+## SENSE and HALO in one PACE interface
+
+The SENSE deployment runs this Django app as `pace-web` behind its local HTTPS
+Nginx endpoint. The existing `/login/` view remains the only browser login.
+After signing in, staff select **SENSE** or **HALO** at `/admin-home/`; HALO's
+recording page is `/halo/`. The HALO page uses Django sessions and CSRF and
+proxies fixed status, session, start, and stop operations to SENSE's internal
+control service. Normal participant accounts cannot open HALO controls.
+
+`Dockerfile.sense` builds the web app for the SENSE Compose stack. Configure
+`PACE_DB_*`, `PACE_DJANGO_SECRET_KEY`, `PACE_DEBUG=false`,
+`PACE_ALLOWED_HOSTS`, `PACE_SECURE_COOKIES=true`, `HALO_DASHBOARD_URL`, and
+`HALO_INTERNAL_TOKEN_FILE` there. The token file must be mounted read-only in
+the web container and kept outside Git. The old standalone Compose deployment
+keeps its default settings unless these variables are set.
+
+The SENSE and HALO sections remain available even when the old SENSE sensor
+worker is absent. On the current SENSE Pi, its I²C devices are missing, so
+its sensor charts will have no new readings. HALO capture remains blocked by
+preflight until both camera connectors and required sensors are working.
+
+Run the integration tests with:
+
+```bash
+python manage.py test data_cube.tests
+```

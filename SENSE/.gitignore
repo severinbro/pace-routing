@@ -1,0 +1,11 @@
+.env
+config/upload.token
+config/certs/
+config/dashboard-auth.json
+config/halo-dashboard-key*
+config/halo-known-hosts
+config/dashboard-internal.token
+config/pace.env
+data/
+__pycache__/
+*.pyc

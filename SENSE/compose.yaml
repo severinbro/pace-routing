@@ -1,0 +1,118 @@
+name: sense
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: sense-nginx
+    restart: unless-stopped
+    ports:
+      - "${SENSE_HTTPS_PORT:-443}:443"
+      - "${SENSE_HTTP_PORT:-80}:80"
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/certs:/etc/nginx/certs:ro
+    depends_on:
+      - receiver
+      - dashboard
+      - pace-web
+    networks:
+      - sense-net
+
+  receiver:
+    build:
+      context: .
+      dockerfile: docker/receiver.Dockerfile
+    image: sense-receiver:local
+    container_name: sense-receiver
+    restart: unless-stopped
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data
+      - ./config/upload.token:/config/upload.token:ro
+    environment:
+      RECEIVER_ROOT: /data
+      UPLOAD_TOKEN_FILE: /config/upload.token
+      LISTEN_HOST: "0.0.0.0"
+      LISTEN_PORT: 8000
+      PROTOCOL_VERSION: "1"
+      LOG_LEVEL: "INFO"
+    networks:
+      - sense-net
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/dashboard.Dockerfile
+    image: sense-dashboard:local
+    container_name: sense-dashboard
+    restart: unless-stopped
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data:ro
+      - ./config/dashboard-auth.json:/config/dashboard-auth.json:ro
+      - ./config/halo-dashboard-key:/config/halo-dashboard-key:ro
+      - ./config/halo-known-hosts:/config/known_hosts:ro
+      - ./config/dashboard-internal.token:/config/dashboard-internal.token:ro
+    networks:
+      - sense-net
+
+  pace-db:
+    image: postgres:15-alpine
+    container_name: sense-pace-db
+    restart: unless-stopped
+    env_file:
+      - ./config/pace.env
+    volumes:
+      - ./data/pace-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pace -d pace"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - sense-net
+
+  pace-redis:
+    image: redis:7-alpine
+    container_name: sense-pace-redis
+    restart: unless-stopped
+    networks:
+      sense-net:
+        aliases:
+          - redis
+
+  pace-web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.sense
+    image: sense-pace-web:local
+    container_name: sense-pace-web
+    restart: unless-stopped
+    env_file:
+      - ./config/pace.env
+    volumes:
+      - ./config/dashboard-internal.token:/config/dashboard-internal.token:ro
+    depends_on:
+      pace-db:
+        condition: service_healthy
+      pace-redis:
+        condition: service_started
+    networks:
+      - sense-net
+
+  ntp:
+    build:
+      context: .
+      dockerfile: docker/ntp.Dockerfile
+    image: sense-ntp:local
+    container_name: sense-ntp
+    restart: unless-stopped
+    ports:
+      - "${SENSE_NTP_BIND_IP:-10.42.10.1}:123:123/udp"
+    volumes:
+      - ./config/chrony.conf:/etc/chrony/chrony.conf:ro
+    networks:
+      - sense-net
+
+networks:
+  sense-net:
+    driver: bridge

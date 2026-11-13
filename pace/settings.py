@@ -21,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-g=ojz27zc65x09d2+fn)zc%zt(7%r)vs(_2!=@v&n=e8klatjy'
+SECRET_KEY = os.environ.get('PACE_DJANGO_SECRET_KEY', 'django-insecure-g=ojz27zc65x09d2+fn)zc%zt(7%r)vs(_2!=@v&n=e8klatjy')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('PACE_DEBUG', 'true').lower() == 'true'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get('PACE_ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
 # Trust the nginx proxy's X-Forwarded-Proto header so Django knows
 # it's being served over HTTPS (required for secure cookies, CSRF, etc.)
@@ -39,12 +39,16 @@ SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 # trusted origin must NOT include :8000. Keep the :8000 variant only for
 # direct Gunicorn access during local debugging.
 CSRF_TRUSTED_ORIGINS = [
+    'https://10.42.10.1:18443',
+    'https://pace-sense.local:18443',
     'https://10.42.0.1',
     'https://10.42.0.1:8000',
     'https://localhost:8000',
     'https://localhost',
     'http://localhost:8000',
 ]
+SESSION_COOKIE_SECURE = os.environ.get('PACE_SECURE_COOKIES', 'false').lower() == 'true'
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 
 # Application definition
@@ -104,10 +108,10 @@ WSGI_APPLICATION = 'pace.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'pace',
-        'USER': 'pace',
-        'PASSWORD': 'pace',
-        'HOST': 'db',       # Matches the service name in docker-compose
+        'NAME': os.environ.get('PACE_DB_NAME', 'pace'),
+        'USER': os.environ.get('PACE_DB_USER', 'pace'),
+        'PASSWORD': os.environ.get('PACE_DB_PASSWORD', 'pace'),
+        'HOST': os.environ.get('PACE_DB_HOST', 'db'),
         'PORT': '5432',
     }
 }
@@ -147,8 +151,13 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+HALO_DASHBOARD_URL = os.environ.get('HALO_DASHBOARD_URL', 'http://dashboard:8080')
+HALO_INTERNAL_TOKEN_FILE = os.environ.get('HALO_INTERNAL_TOKEN_FILE', '/config/dashboard-internal.token')
+SENSE_HARDWARE_AVAILABLE = os.environ.get('SENSE_HARDWARE_AVAILABLE', 'true').lower() == 'true'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
