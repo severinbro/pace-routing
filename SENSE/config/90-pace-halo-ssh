@@ -1,0 +1,15 @@
+#!/bin/sh
+# NetworkManager's shared-WLAN firewall rejects new connections from Docker
+# bridges. Permit only container-initiated SSH to HALO on the PACE network.
+set -eu
+
+[ "${1:-}" = wlan1 ] || exit 0
+[ "${2:-}" = up ] || [ "${2:-}" = dhcp4-change ] || exit 0
+[ "${CONNECTION_ID:-}" = PACE ] || exit 0
+
+chain='ip nm-shared-wlan1 filter_forward'
+/usr/sbin/nft list chain $chain >/dev/null 2>&1 || exit 0
+if /usr/sbin/nft list chain $chain | /bin/grep -Fq 'pace-halo-dashboard'; then
+    exit 0
+fi
+/usr/sbin/nft insert rule $chain iifname 'br-*' oifname 'wlan1' ip daddr 10.42.10.2 tcp dport 22 accept comment 'pace-halo-dashboard'

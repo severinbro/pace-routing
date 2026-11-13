@@ -142,6 +142,15 @@ ssh halo 'timedatectl show -p NTPSynchronized; timedatectl timesync-status'
 HALO verwendet die SENSE-Uhr auch ohne eigenen Internetzugang. Wenn SENSE
 seinen Internet-Zeitabgleich verliert, folgt HALO weiterhin der SENSE-Uhr.
 
+NetworkManager sperrt bei einem geteilten PACE-WLAN standardmäßig Verbindungen
+aus Docker-Netzen zu HALO. Für die Dashboard-Steuerung die begrenzte SSH-Regel
+als Dispatcher installieren; sie wird nach einem WLAN-Neustart erneut gesetzt:
+
+```bash
+sudo install -m 755 config/90-pace-halo-ssh /etc/NetworkManager/dispatcher.d/90-pace-halo-ssh
+sudo env CONNECTION_ID=PACE /etc/NetworkManager/dispatcher.d/90-pace-halo-ssh wlan1 up
+```
+
 ### Schritt 2: TLS-Zertifikate & Shared Secret anlegen
 Für den lokalen Betrieb oder Testlauf kann das mitgelieferte Generierungsskript genutzt werden:
 ```bash

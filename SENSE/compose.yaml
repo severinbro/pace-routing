@@ -106,12 +106,9 @@ services:
     image: sense-ntp:local
     container_name: sense-ntp
     restart: unless-stopped
-    ports:
-      - "${SENSE_NTP_BIND_IP:-10.42.10.1}:123:123/udp"
+    network_mode: host
     volumes:
       - ./config/chrony.conf:/etc/chrony/chrony.conf:ro
-    networks:
-      - sense-net
 
 networks:
   sense-net:

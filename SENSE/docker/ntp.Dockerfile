@@ -5,4 +5,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 123/udp
-ENTRYPOINT ["chronyd", "-d", "-x", "-f", "/etc/chrony/chrony.conf"]
+# Docker restarts retain the container filesystem. Remove a stale PID file left
+# after an unclean stop before starting chronyd as PID 1 again.
+ENTRYPOINT ["/bin/sh", "-c", "rm -f /run/chrony/chronyd.pid && exec chronyd -d -x -f /etc/chrony/chrony.conf"]
