@@ -1,5 +1,35 @@
 # Personalized Assessment of Urban Comfort for Explainable Routing (PACE)
 
+## Current SENSE and HALO layout
+
+The same project tree is present on both Raspberry Pis. The shared Django login
+and PACE interface stay at the repository root. Each Pi runs only its own stack:
+
+```text
+pace-routing/
+├── data_cube/ pace/ static/ templates/   # Shared Django app
+├── SENSE/                              # HTTPS, receiver, dashboard, DB, Redis, NTP
+│   ├── compose.yaml
+│   ├── config/ dashboard/ receiver/ tests/
+│   └── data/                           # Live SENSE data only on SENSE Pi
+└── HALO/                               # Capture, extraction, upload, control
+    ├── compose.yaml
+    ├── capture/ control/ config/ tests/
+    └── data/                           # Live HALO data only on HALO Pi
+```
+
+On SENSE, run `docker compose` from `pace-routing/SENSE/`. On HALO, run it
+from `/home/Pi_Mz/Documents/pace-routing/HALO/`. Runtime data, `.env` files,
+certificates, SSH keys and tokens stay on their respective Pi and are excluded
+from Git and from the other Pi's mirrored code copy. The SENSE web UI is at
+`https://10.42.10.1:18443/login/`; staff can select SENSE or HALO after login.
+The active HALO services use the image already installed on HALO because that
+Pi has no Internet connection for rebuilding the image.
+
+The architecture and installation notes below describe the original standalone
+PACE deployment. See [SENSE](SENSE/README.md) and [HALO](HALO/README.md)
+for the current two-Pi deployment.
+
 > **Project Status: Under Construction**
 > The PACE software ecosystem, including the containerized edge-processing environment and the GraphSAGE data fusion scripts, is currently undergoing final refinement. This repository is being prepared for upcoming empirical field trials.
 

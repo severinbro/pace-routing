@@ -6,16 +6,21 @@ the HTTPS receiver and stores accepted sessions under `data/incoming/`.
 
 ## Setup and timed recording
 
-From the `HALO` project folder:
+From `/home/Pi_Mz/Documents/pace-routing/HALO/` on the HALO Pi:
 
 ```bash
 sudo install -m 644 config/99-halo-redis.conf /etc/sysctl.d/99-halo-redis.conf
 sudo sysctl -p /etc/sysctl.d/99-halo-redis.conf
-sudo docker compose build
-sudo docker compose up -d redis extractor uploader
+sudo docker compose up -d --no-build redis extractor uploader
 bash ./record.sh 120
 sudo docker compose logs -f extractor
 ```
+
+HALO currently has no Internet connection. `--no-build` uses its installed
+`halo-camera-capture:local` image; rebuild only when the base image and package
+sources are available. Capture code, configuration and recordings are now under
+this `HALO/` directory. SENSE's mirrored source is in the sibling `SENSE/`
+directory, without SENSE's live database, keys or received image data.
 
 `record.sh 120` records for 120 seconds; pass any duration of at least 1 second,
 such as `bash ./record.sh 15.5`. The script ensures Redis and the extractor are

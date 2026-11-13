@@ -41,8 +41,8 @@ Dieses Verzeichnis enthält den containerisierten Upload- und Empfangsdienst fü
 ## 2. Ordnerstruktur
 
 ```text
-Software-System/SENSE/
-├── compose.yaml              # Docker Compose (Nginx + Receiver)
+pace-routing/SENSE/
+├── compose.yaml              # Docker Compose (Nginx, Receiver, Dashboard, PACE web, DB, Redis, NTP)
 ├── .env.example              # Vorlage für Ports, UIDs, Pfade
 ├── config/
 │   ├── nginx.conf            # Nginx Streaming-Reverse-Proxy
@@ -51,7 +51,10 @@ Software-System/SENSE/
 │   ├── certs/                # TLS-Zertifikate (server.crt, server.key)
 │   └── upload.token          # Gemeinsames Bearer-Secret (0600)
 ├── docker/
-│   └── receiver.Dockerfile   # Leichtgewichtiges Python 3.11-slim Image
+│   ├── receiver.Dockerfile
+│   ├── dashboard.Dockerfile
+│   └── ntp.Dockerfile
+├── dashboard/                 # HALO-Steuerdienst und Transferübersicht
 ├── receiver/
 │   ├── server.py             # Multithreaded HTTP-Server (Protocol v1)
 │   └── verify.py             # Kryptografische Manifest- & Strukturprüfung
@@ -86,8 +89,8 @@ Das selbstsignierte Zertifikat enthält `10.42.10.1` als IP SAN. Vom SENSE-Pi
 aus die Zugangsdaten in HALOs bestehende Konfigurationspfade kopieren:
 
 ```bash
-scp -i ~/.ssh/halo_ed25519 config/upload.token Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/HALO/config/halo-upload.token
-scp -i ~/.ssh/halo_ed25519 config/certs/server.crt Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/HALO/config/sense-server.crt
+scp -i ~/.ssh/halo_ed25519 config/upload.token Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/pace-routing/HALO/config/halo-upload.token
+scp -i ~/.ssh/halo_ed25519 config/certs/server.crt Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/pace-routing/HALO/config/sense-server.crt
 ```
 
 Auf HALO in `config/capture.env` diese Werte setzen:
@@ -212,9 +215,8 @@ python3 receiver/verify.py data/incoming/<SESSION_ID>
 
 ## 7. Gemeinsame PACE-Oberfläche für SENSE und HALO
 
-Das frühere [PACE-Routing-Projekt](https://github.com/severinbro/pace-routing) liegt
-hier unter `pace-routing/` und läuft als `pace-web` mit PostgreSQL und Redis in
-diesem Compose-Stack. Einstieg im PACE-WLAN:
+Die gemeinsame Django-App liegt eine Ebene höher im Projektstamm und läuft als
+`pace-web` mit PostgreSQL und Redis in diesem Compose-Stack. Einstieg im PACE-WLAN:
 
 - **https://10.42.10.1:18443/login/** – bestehender Django-Login mit Benutzername und Passwort.
 - **https://10.42.10.1:18443/admin-home/** – Auswahl zwischen SENSE und HALO.
