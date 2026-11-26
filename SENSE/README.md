@@ -1,6 +1,6 @@
 # SENSE — Verarbeitungs- und Empfangsplattform
 
-Dieses Verzeichnis enthält den containerisierten Upload- und Empfangsdienst für die **SENSE-Plattform** (Verarbeitungs-Pi 5 / PACE-Server). Er implementiert serverseitig das **HALO Protocol v1** (`docs/upload-protocol.md`) zum Empfang von Stereo-Bildpaaren, IMU-Sensordaten und Metadaten vom HALO-Kamera-Pi.
+Dieses Verzeichnis enthält den containerisierten Upload- und Empfangsdienst für die **SENSE-Plattform** (Verarbeitungs-Pi 5 / PACE-Server). Er empfängt Stereo-Bildpaare, IMU-Sensordaten und Metadaten vom HALO-Kamera-Pi über das [HALO Protocol v1](../HALO/README.md#transfer-to-sense).
 
 ---
 
@@ -45,7 +45,7 @@ pace-routing/SENSE/
 ├── compose.yaml              # Docker Compose (Nginx, Receiver, Dashboard, PACE web, DB, Redis, NTP)
 ├── .env.example              # Vorlage für Ports, UIDs, Pfade
 ├── config/
-│   ├── nginx.conf            # Nginx Streaming-Reverse-Proxy
+│   ├── nginx.conf            # Nginx-Vorlage für Streaming und HTTPS-Weiterleitung
 │   ├── receiver.env.example  # Backend-Konfiguration
 │   ├── generate_certs.sh     # Hilfsskript für TLS-Zertifikate
 │   ├── certs/                # TLS-Zertifikate (server.crt, server.key)
@@ -67,11 +67,21 @@ pace-routing/SENSE/
 
 ## 3. Installation & Inbetriebnahme auf dem SENSE-Pi
 
+Auf SENSE lautet das Linux-Konto `pacesense`. Das Projektverzeichnis für
+Compose ist `/home/pacesense/Documents/development/pace-routing/SENSE/`.
+Im PACE-WLAN ist SSH unter `pacesense@10.42.10.1` erreichbar. Der
+Systemhostname dieser Installation lautet `raspberrypi`. HALO verwendet
+`pace-sense.local` als TLS-Namen für das Zertifikat und verbindet sich mit
+der IP-Adresse `10.42.10.1`.
+
 ### Voraussetzungen
-- Raspberry Pi OS (Bookworm 64-Bit)
+- Raspberry Pi OS (64-Bit, aktuelle Installation auf Debian 13 Trixie)
 - Docker & Docker Compose Plugin (`sudo apt install docker-ce docker-compose-plugin`)
 
 ### Schritt 1: Konfiguration & Verzeichnisse vorbereiten
+
+Bei einer neuen Installation im SENSE-Verzeichnis ausführen.
+
 ```bash
 cp .env.example .env
 mkdir -p data/{staging,incoming,processing,completed,failed}
@@ -85,8 +95,10 @@ Adresse im HALO-Upload konfiguriert werden.
 ### PACE WLAN Verbindung (SENSE: 10.42.10.1)
 
 Auf diesem SENSE-Pi ist `SENSE_HTTPS_PORT=10.42.10.1:18443` in `.env` gesetzt.
-Das selbstsignierte Zertifikat enthält `10.42.10.1` als IP SAN. Vom SENSE-Pi
-aus die Zugangsdaten in HALOs bestehende Konfigurationspfade kopieren:
+`SENSE_HTTP_PORT=127.0.0.1:18080` ist lokal erreichbar und leitet auf die
+konfigurierte HTTPS-Adresse weiter. Das selbstsignierte Zertifikat enthält
+`10.42.10.1` als IP SAN. Vom SENSE-Pi aus die Zugangsdaten in HALOs bestehende
+Konfigurationspfade kopieren:
 
 ```bash
 scp -i ~/.ssh/halo_ed25519 config/upload.token Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/pace-routing/HALO/config/halo-upload.token
@@ -130,7 +142,8 @@ NTP=10.42.10.1
 FallbackNTP=
 ```
 
-Status von SENSE aus prüfen:
+Der SSH-Alias `halo` auf SENSE verbindet sich als `Pi_Mz` mit `10.42.10.2`
+und verwendet `~/.ssh/halo_ed25519`. Status von SENSE aus prüfen:
 
 ```bash
 timedatectl show -p NTPSynchronized
@@ -174,6 +187,29 @@ docker compose logs -f
 curl --cacert config/certs/server.crt https://10.42.10.1:18443/healthz
 # Antwort: {"status":"ok","node":"sense"}
 ```
+
+### Wiederanlauf nach einem Konto- oder Verzeichniswechsel
+
+Docker speichert beim Erstellen der Container die absoluten Host-Pfade der
+Bind-Mounts. Nach einem Umzug können diese Pfade fehlen. PostgreSQL kann
+dann am alten Pfad eine leere Datenbank initialisieren. Die bestehende
+Datenbank dieser Installation liegt unter `SENSE/data/pace-postgres/` im
+aktuellen Projekt.
+
+Erstelle zuerst den Datenbankcontainer aus dem aktuellen SENSE-Verzeichnis
+neu und prüfe den Mount sowie die bereits vorhandenen Django-Migrationen.
+
+```bash
+cd /home/pacesense/Documents/development/pace-routing/SENSE &&
+docker compose up -d --no-build --no-deps --force-recreate --wait pace-db &&
+docker inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' sense-pace-db &&
+docker compose exec -T -u postgres pace-db sh -ec \
+  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT count(*) FROM django_migrations;"'
+```
+
+Wenn der Mount auf `data/pace-postgres/` im aktuellen Projekt zeigt und die
+vorhandenen Migrationen sichtbar sind, starte die übrigen Dienste mit
+`docker compose up -d --no-build --wait` und prüfe den HTTPS-Endpunkt.
 
 ---
 

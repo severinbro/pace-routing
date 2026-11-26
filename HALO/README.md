@@ -1,12 +1,14 @@
 # HALO — Head-mounted Ambiance and Localization Optics
 
 HALO runs Redis, an on-demand `capture` service, a background `extractor`, and
-    a background `uploader`. Camera 0 is left; camera 1 is right. The SENSE Pi runs
+a background `uploader`. Camera 0 is left and camera 1 is right. The SENSE Pi runs
 the HTTPS receiver and stores accepted sessions under `data/incoming/`.
 
 ## Setup and timed recording
 
-From `/home/Pi_Mz/Documents/pace-routing/HALO/` on the HALO Pi:
+Sign in to the HALO Pi as `Pi_Mz` and run these commands from
+`/home/Pi_Mz/Documents/pace-routing/HALO/`. On PACE Wi-Fi, HALO's SSH address
+is `Pi_Mz@10.42.10.2`.
 
 ```bash
 sudo install -m 644 config/99-halo-redis.conf /etc/sysctl.d/99-halo-redis.conf
@@ -22,15 +24,14 @@ sources are available. Capture code, configuration and recordings are now under
 this `HALO/` directory. SENSE's mirrored source is in the sibling `SENSE/`
 directory, without SENSE's live database, keys or received image data.
 
-`record.sh 120` records for 120 seconds; pass any duration of at least 1 second,
-such as `bash ./record.sh 15.5`. The script ensures Redis and the extractor are
-running, then starts one capture. A second invocation refuses to use the
-cameras while a timed recording is active. Capture returns after the videos
-and IMU log are saved. Frame extraction runs in the background. A session is
-ready when its `.extraction_complete` file
-appears. The extractor checks the session folder for work that was not queued
-or was interrupted, then retries it. Redis stores its queue under `data/redis/`
-with append-only persistence.
+`record.sh 120` records for 120 seconds. You can pass any duration of at least
+1 second, such as `bash ./record.sh 15.5`. The script starts Redis, the
+extractor, and the uploader before starting one capture. A lock prevents
+overlapping timed recordings. Capture returns after saving the videos and IMU
+log. Frame extraction runs in the background and writes `.extraction_complete`
+when it finishes. The extractor scans for missing or interrupted jobs and
+retries them. Redis stores its queue under `data/redis/` with append-only
+persistence.
 
 Docker is enabled at boot on this Pi. Redis and the extractor use
 `restart: unless-stopped`, so once started they come back after a reboot.
@@ -95,6 +96,52 @@ brackets are flagged, never silently corrected; the images remain available.
 The IMU `utc_ns` is the midpoint of the host read window, not a guaranteed
 sensor-sample timestamp. Raw acceleration, gyro, and quaternion values remain
 in `imu.csv` along with read-window start, end, and duration.
+
+## Test a capture from the PACE GUI
+
+On PACE Wi-Fi, sign in with a staff account on the
+[HALO page](https://10.42.10.1:18443/halo/). Wait for **Online** and the
+readiness checks to pass. Select **Start recording**, then **Stop and finalize**
+after a short capture. Look for the new session under **Sessions and
+synchronization**.
+
+The GUI starts the uploader with each recording. For a test that only writes
+data to HALO, pause the SENSE receiver before recording. Run
+`docker compose stop receiver` from the [SENSE Compose directory](../SENSE/README.md).
+This pauses all incoming transfers. The GUI still needs the SENSE dashboard
+and working HALO connectivity. To keep the test session local after the
+receiver resumes, stop the HALO uploader after finalizing and remove the test
+session's `.transfer_pending` marker as described below. Run
+`docker compose start receiver` on SENSE to resume receiving uploads.
+
+## Test a capture without SENSE
+
+HALO can record and extract frames while SENSE is offline. Use the locally
+installed capture image. On HALO, check `date -u` against the current UTC time
+before recording. The local capture validates the camera timestamps against a
+plausible clock, and a failed validation leaves a hidden `.partial` session.
+
+```bash
+cd /home/Pi_Mz/Documents/pace-routing/HALO &&
+mkdir -p data &&
+sudo docker compose stop uploader &&
+sudo docker compose up -d --no-build redis extractor &&
+flock -n data/.record.lock sudo docker compose run --rm --no-deps capture once 15
+```
+
+In the new `data/sessions/<SESSION_ID>/` directory, check `video/left.mkv`,
+`video/right.mkv`, and `imu.csv`. The `.extraction_complete` marker confirms
+that extraction finished. Check progress with
+`sudo docker compose logs --tail 40 extractor`.
+
+The uploader will send queued sessions when it runs again. To keep this test
+session local, wait for its `.transfer_pending` marker and remove only that
+marker while the uploader is stopped. Replace `SESSION_ID` with the directory
+name printed by the capture command.
+
+```bash
+rm -- data/sessions/SESSION_ID/.transfer_pending
+```
 
 ## Ambient light sensor
 

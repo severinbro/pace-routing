@@ -1,8 +1,9 @@
 # HALO dashboard controller deployment
 
-These files are the SENSE-maintained source for HALO's restricted control path.
-These files live in `/home/Pi_Mz/Documents/pace-routing/HALO/control/` on HALO.
-The dashboard key's `authorized_keys` entry uses
+SENSE connects to the HALO controller as `Pi_Mz@10.42.10.2` over PACE Wi-Fi.
+On HALO, the controller runs as `Pi_Mz` from
+`/home/Pi_Mz/Documents/pace-routing/HALO/control/`. The restricted dashboard
+key entry in that account's `~/.ssh/authorized_keys` uses
 `restrict,command="/home/Pi_Mz/Documents/pace-routing/HALO/control/forced_command.sh"`.
 
 The controller uses a transient systemd unit for a recording. The unit survives
