@@ -18,6 +18,10 @@
     <nav class="navbar navbar-expand fixed-top pace-navbar">
         <div class="navbar-nav w-100 d-flex flex-row">
 
+            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}" title="About">
+                <i class="bi bi-info-circle"></i>
+            </a>
+
             {% if request.user.is_authenticated and request.user.is_staff %}
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' %}active{% endif %}" href="{% url 'sense_home' %}">
                     <i class="bi bi-cpu"></i> <span>SENSE</span>
@@ -27,11 +31,7 @@
                 </a>
             {% endif %}
 
-            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}">
-                <i class="bi bi-info-circle"></i>
-            </a>
-
-            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}">
+            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Survey">
                 <i class="bi bi-clipboard-check"></i>
             </a>
 

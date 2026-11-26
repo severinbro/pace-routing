@@ -2,82 +2,86 @@
 {% load static %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="text-center mb-4">
-        <img src="{% static 'img/logo_nobg.png' %}" alt="PACE Logo" class="mb-3" style="max-height: 76px; width: auto;">
-        <h2 class="fw-bold">About PACE</h2>
-        <p class="text-muted mb-0">Personalized Assessment of Urban Comfort for Explainable Routing — SENSE &amp; HALO Platform.</p>
+<div class="container py-3 py-md-4">
+    <div class="text-center mb-3 mb-md-4">
+        <img src="{% static 'img/logo_nobg.png' %}" alt="PACE Logo" class="mb-2" style="max-height: 60px; width: auto;">
+        <h2 class="fw-bold h3 mb-1">About PACE</h2>
+        <p class="text-muted small mb-0">Personalized Assessment of Urban Comfort for Explainable Routing &mdash; SENSE &amp; HALO.</p>
     </div>
 
-    <div class="pace-card p-4 mb-4">
-        <div class="pace-section-title">
+    <div class="pace-card p-3 p-md-4 mb-3">
+        <div class="pace-section-title fs-6 mb-2">
             <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-leaf-fill"></i></div>
             What is PACE?
         </div>
-        <p>
-            The PACE project investigates how people perceive comfort in urban environments and bridges the gap between
+        <p class="small mb-2">
+            PACE investigates how people perceive comfort in urban environments and bridges the gap between
             objectively measured environmental conditions and subjective human perception.
         </p>
-        <p class="mb-0">
+        <p class="small mb-0">
             By combining mobile environmental sensing (<strong>SENSE</strong>), head-mounted stereo-optical and thermal
-            capture (<strong>HALO</strong>), and in-situ participant ratings, PACE builds the foundation for
-            human-centered urban planning and explainable pedestrian routing.
+            capture (<strong>HALO</strong>), and in-situ participant ratings, PACE supports human-centered urban planning
+            and explainable pedestrian routing.
         </p>
     </div>
 
-    <div class="pace-card p-4 mb-4">
-        <div class="pace-section-title">
+    <div class="pace-card p-3 p-md-4 mb-3">
+        <div class="pace-section-title fs-6 mb-2">
             <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-signpost-split-fill"></i></div>
             How It Works
         </div>
-        <ol class="mb-0">
-            <li class="mb-2"><strong>Walk</strong> &mdash; The group walks along an urban route while SENSE and HALO record synchronized environmental, optical, and thermal data.</li>
-            <li class="mb-2"><strong>Stop</strong> &mdash; At each designated stop, the operator unlocks the in-situ survey for participants.</li>
-            <li class="mb-2"><strong>Survey</strong> &mdash; Participants rate environmental features, personal perception, and overall comfort on a 1&ndash;7 Likert scale.</li>
-            <li class="mb-0"><strong>Analyze</strong> &mdash; Synchronized sensor streams, live frames, and survey responses are stored on SENSE for urban comfort modeling.</li>
+        <ol class="small ps-3 mb-0">
+            <li class="mb-1"><strong>Walk</strong> &mdash; SENSE and HALO record synchronized environmental, optical, and thermal data along the route.</li>
+            <li class="mb-1"><strong>Stop</strong> &mdash; At each stop, the operator unlocks the in-situ survey.</li>
+            <li class="mb-1"><strong>Survey</strong> &mdash; Participants rate environmental features, personal perception, and overall comfort (1&ndash;7 Likert).</li>
+            <li class="mb-0"><strong>Analyze</strong> &mdash; Sensor streams, live frames, and survey responses are combined on SENSE for comfort modeling.</li>
         </ol>
     </div>
 
-    <div class="row g-4 mb-4">
-        <div class="col-lg-6">
-            <div class="pace-card p-4 h-100">
-                <div class="pace-section-title">
+    <div class="row g-3 mb-3 mb-md-4">
+        <div class="col-12 col-md-6">
+            <div class="pace-card p-3 h-100">
+                <div class="pace-section-title fs-6 mb-2">
                     <div class="pace-icon-tile pace-icon-tile-sky"><i class="bi bi-cpu-fill"></i></div>
-                    SENSE Platform (Processing &amp; Environment)
+                    SENSE Platform
                 </div>
-                <div class="pace-data-row"><span class="label">Compute</span><span class="value">Raspberry Pi 5 + AI HAT+ 2 (Hailo-10H)</span></div>
-                <div class="pace-data-row"><span class="label">GNSS</span><span class="value">SAM-M10Q &amp; Admin Smartphone</span></div>
-                <div class="pace-data-row"><span class="label">Atmosphere (BME280)</span><span class="value">Temp, humidity, pressure</span></div>
-                <div class="pace-data-row"><span class="label">Air Quality (ENS160)</span><span class="value">AQI, TVOC, eCO2</span></div>
-                <div class="pace-data-row"><span class="label">Particulates (PMSA003I)</span><span class="value">PM1, PM2.5, PM10</span></div>
-                <div class="pace-data-row"><span class="label">Motion &amp; Audio</span><span class="value">LIS3DH + USB Mic (dB)</span></div>
+                <div class="small">
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Compute</span><span class="value text-end">RPi 5 + AI HAT+ 2</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">GNSS</span><span class="value text-end">SAM-M10Q &amp; Phone</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Climate</span><span class="value text-end">BME280 (T, RH, p)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Air Quality</span><span class="value text-end">ENS160 (AQI, TVOC, eCO2)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Particles</span><span class="value text-end">PMSA003I (PM1/2.5/10)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Motion / Audio</span><span class="value text-end">LIS3DH + USB Mic (dB)</span></div>
+                </div>
             </div>
         </div>
-        <div class="col-lg-6">
-            <div class="pace-card p-4 h-100">
-                <div class="pace-section-title">
+        <div class="col-12 col-md-6">
+            <div class="pace-card p-3 h-100">
+                <div class="pace-section-title fs-6 mb-2">
                     <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-camera-video-fill"></i></div>
-                    HALO Platform (Head-Mounted Optics)
+                    HALO Platform
                 </div>
-                <div class="pace-data-row"><span class="label">Compute</span><span class="value">Raspberry Pi 5 (NTP synced to SENSE)</span></div>
-                <div class="pace-data-row"><span class="label">Stereo RGB</span><span class="value">2&times; IMX477 M12 (90 mm baseline, rpi.sync)</span></div>
-                <div class="pace-data-row"><span class="label">Thermal (LWIR)</span><span class="value">Thermal Master P2 Pro (256&times;192)</span></div>
-                <div class="pace-data-row"><span class="label">Orientation (BNO085)</span><span class="value">9-DoF IMU (quaternions &amp; gravity)</span></div>
-                <div class="pace-data-row"><span class="label">Ambient Light (BH1750)</span><span class="value">Illuminance (lux)</span></div>
-                <div class="pace-data-row"><span class="label">Data Exchange</span><span class="value">Live frames (v2) &amp; full archive (v1) via TLS</span></div>
+                <div class="small">
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Compute</span><span class="value text-end">RPi 5 (NTP &rarr; SENSE)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Stereo RGB</span><span class="value text-end">2&times; IMX477 M12 (90 mm)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Thermal</span><span class="value text-end">P2 Pro LWIR (256&times;192)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">IMU</span><span class="value text-end">BNO085 (9-DoF)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Light</span><span class="value text-end">BH1750 (Lux)</span></div>
+                    <div class="pace-data-row py-1 d-flex justify-content-between gap-2"><span class="label text-muted">Transfer</span><span class="value text-end">Live (v2) &amp; Archive (v1)</span></div>
+                </div>
             </div>
         </div>
     </div>
 
     <div class="d-flex justify-content-center gap-2 flex-wrap">
-        <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary btn-lg px-4">
+        <a href="{% url 'surveys_tab' %}" class="btn btn-pace-primary px-4">
             <i class="bi bi-clipboard-check"></i> Go to Survey
         </a>
         {% if request.user.is_authenticated and request.user.is_staff %}
-        <a href="{% url 'sense_home' %}" class="btn btn-pace-mint btn-lg px-4">
+        <a href="{% url 'sense_home' %}" class="btn btn-pace-mint px-4">
             <i class="bi bi-cpu"></i> SENSE
         </a>
-        <a href="{% url 'halo_home' %}" class="btn btn-outline-dark btn-lg px-4">
+        <a href="{% url 'halo_home' %}" class="btn btn-outline-dark px-4">
             <i class="bi bi-camera-video"></i> HALO
         </a>
         {% endif %}
