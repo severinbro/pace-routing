@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import pwd
 import re
 import shutil
 import subprocess
@@ -130,8 +131,9 @@ def start():
             return {'error': 'HALO is not ready', 'status': status()}
         STOP.unlink(missing_ok=True)
         atomic_json(STATE, {'stage': 'starting', 'started_at': time.time()})
+        run_user = os.environ.get('HALO_USER') or pwd.getpwuid(os.getuid()).pw_name
         command = ['sudo', '-n', 'systemd-run', '--unit=' + UNIT, '--collect',
-                   '--property=WorkingDirectory=' + str(ROOT), '--uid=Pi_Mz',
+                   '--property=WorkingDirectory=' + str(ROOT), '--uid=' + run_user,
                    '/usr/bin/python3', str(ROOT / 'control/runner.py')]
         result = run(*command, timeout=20)
         if result.returncode:

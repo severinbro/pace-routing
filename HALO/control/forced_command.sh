@@ -9,4 +9,5 @@ case "${args[0]:-}" in
     [[ "${args[1]}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "${args[2]}" =~ ^[a-f0-9]{64}$ && "${args[3]}" =~ ^[a-f0-9]{64}$ ]] || exit 2 ;;
   *) exit 2 ;;
 esac
-exec /usr/bin/python3 /home/Pi_Mz/Documents/pace-routing/HALO/control/controller.py "${args[@]}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec /usr/bin/python3 "${script_dir}/controller.py" "${args[@]}"
