@@ -144,7 +144,7 @@ h1, h2, h3, h4, h5, h6 {
     background: var(--pace-navy) !important;
     border-bottom: 3px solid var(--pace-border);
     box-shadow: none !important;
-    padding: 0.5rem 0;
+    padding: 0.5rem 0.75rem;
 }
 /* Allow horizontal scrolling when the nav items overflow on small screens.
    Items never wrap or shrink so each icon stays fully visible/tappable. */
