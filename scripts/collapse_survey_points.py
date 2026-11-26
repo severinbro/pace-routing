@@ -44,7 +44,7 @@ removes the dense "blob" of stationary points recorded during the stop.
 
 Usage
 -----
-    python collapse_survey_points.py \
+    python scripts/collapse_survey_points.py \
         --surveys  pace_survey_export_20260813_120000.json \
         --sensors  pace_sensor_export_20260813_120000.csv \
         --out-csv  route_collapsed.csv \

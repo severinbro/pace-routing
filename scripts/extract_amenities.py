@@ -34,7 +34,7 @@ the extracted parameters.
 
 Usage
 -----
-    python extract_amenities.py \
+    python scripts/extract_amenities.py \
         --sensors  pace_sensor_export_20260813_120000.csv \
         --surveys  pace_survey_export_20260813_120000.json
 

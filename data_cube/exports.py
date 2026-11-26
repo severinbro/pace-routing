@@ -753,7 +753,7 @@ def write_weather_csv(start=None, end=None):
     Returns the absolute path to the written file; caller is responsible
     for cleaning it up after use.
     """
-    import enrich_weather as _ew
+    from scripts import enrich_weather as _ew
 
     # Produce the measurements CSV first, then enrich it in place.
     sensor_path = write_sensor_csv(start=start, end=end)

@@ -1,6 +1,15 @@
 data/
 .git/
 __pycache__/
-*.pyc
+*.py[cod]
+*.log
+.vscode/
+.venv/
+venv/
+.env
+.env.*
+nginx/certs/
+staticfiles/
+3d_print_files/
 SENSE/
 HALO/

@@ -47,6 +47,7 @@ pace-routing/SENSE/
 ├── config/
 │   ├── nginx.conf            # Nginx-Vorlage für Streaming und HTTPS-Weiterleitung
 │   ├── receiver.env.example  # Backend-Konfiguration
+│   ├── pace.env.example      # Vorlage für Datenbank- und Django-Umgebung
 │   ├── generate_certs.sh     # Hilfsskript für TLS-Zertifikate
 │   ├── certs/                # TLS-Zertifikate (server.crt, server.key)
 │   └── upload.token          # Gemeinsames Bearer-Secret (0600)
@@ -67,9 +68,9 @@ pace-routing/SENSE/
 
 ## 3. Installation & Inbetriebnahme auf dem SENSE-Pi
 
-Auf SENSE lautet das Linux-Konto `pacesense`. Das Projektverzeichnis für
-Compose ist `/home/pacesense/Documents/development/pace-routing/SENSE/`.
-Im PACE-WLAN ist SSH unter `pacesense@10.42.10.1` erreichbar. Der
+Auf SENSE lautet das Linux-Konto `<sense-user>`. Das Projektverzeichnis für
+Compose ist `/path/to/pace-routing/SENSE/`.
+Im PACE-WLAN ist SSH unter `<sense-user>@10.42.10.1` erreichbar. Der
 Systemhostname dieser Installation lautet `raspberrypi`. HALO verwendet
 `pace-sense.local` als TLS-Namen für das Zertifikat und verbindet sich mit
 der IP-Adresse `10.42.10.1`.
@@ -101,8 +102,8 @@ konfigurierte HTTPS-Adresse weiter. Das selbstsignierte Zertifikat enthält
 Konfigurationspfade kopieren:
 
 ```bash
-scp -i ~/.ssh/halo_ed25519 config/upload.token Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/pace-routing/HALO/config/halo-upload.token
-scp -i ~/.ssh/halo_ed25519 config/certs/server.crt Pi_Mz@10.42.10.2:/home/Pi_Mz/Documents/pace-routing/HALO/config/sense-server.crt
+scp -i ~/.ssh/halo_ed25519 config/upload.token <halo-user>@10.42.10.2:/path/to/pace-routing/HALO/config/halo-upload.token
+scp -i ~/.ssh/halo_ed25519 config/certs/server.crt <halo-user>@10.42.10.2:/path/to/pace-routing/HALO/config/sense-server.crt
 ```
 
 Auf HALO in `config/capture.env` diese Werte setzen:
@@ -142,7 +143,7 @@ NTP=10.42.10.1
 FallbackNTP=
 ```
 
-Der SSH-Alias `halo` auf SENSE verbindet sich als `Pi_Mz` mit `10.42.10.2`
+Der SSH-Alias `halo` auf SENSE verbindet sich als `<halo-user>` mit `10.42.10.2`
 und verwendet `~/.ssh/halo_ed25519`. Status von SENSE aus prüfen:
 
 ```bash
@@ -200,7 +201,7 @@ Erstelle zuerst den Datenbankcontainer aus dem aktuellen SENSE-Verzeichnis
 neu und prüfe den Mount sowie die bereits vorhandenen Django-Migrationen.
 
 ```bash
-cd /home/pacesense/Documents/development/pace-routing/SENSE &&
+cd /path/to/pace-routing/SENSE &&
 docker compose up -d --no-build --no-deps --force-recreate --wait pace-db &&
 docker inspect --format '{{range .Mounts}}{{println .Source}}{{end}}' sense-pace-db &&
 docker compose exec -T -u postgres pace-db sh -ec \

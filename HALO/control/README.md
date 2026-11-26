@@ -1,10 +1,10 @@
 # HALO dashboard controller deployment
 
-SENSE connects to the HALO controller as `Pi_Mz@10.42.10.2` over PACE Wi-Fi.
-On HALO, the controller runs as `Pi_Mz` from
-`/home/Pi_Mz/Documents/pace-routing/HALO/control/`. The restricted dashboard
+SENSE connects to the HALO controller as `<halo-user>@10.42.10.2` over PACE Wi-Fi.
+On HALO, the controller runs as `<halo-user>` from
+`/path/to/pace-routing/HALO/control/`. The restricted dashboard
 key entry in that account's `~/.ssh/authorized_keys` uses
-`restrict,command="/home/Pi_Mz/Documents/pace-routing/HALO/control/forced_command.sh"`.
+`restrict,command="/path/to/pace-routing/HALO/control/forced_command.sh"`.
 
 The controller uses a transient systemd unit for a recording. The unit survives
 SSH disconnects and its runner watches the 4 GiB disk reserve. `record_ui.sh`

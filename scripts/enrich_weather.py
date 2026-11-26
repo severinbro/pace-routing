@@ -45,11 +45,11 @@ match is used.
 Usage
 -----
 
-    python enrich_weather.py \
+    python scripts/enrich_weather.py \
         --sensors pace_sensor_export_20260813_120000.csv
 
     # older measurements — use the archive endpoint
-    python enrich_weather.py \
+    python scripts/enrich_weather.py \
         --sensors pace_sensor_export_20260101_120000.csv \
         --archive
 

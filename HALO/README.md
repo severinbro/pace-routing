@@ -6,9 +6,9 @@ the HTTPS receiver and stores accepted sessions under `data/incoming/`.
 
 ## Setup and timed recording
 
-Sign in to the HALO Pi as `Pi_Mz` and run these commands from
-`/home/Pi_Mz/Documents/pace-routing/HALO/`. On PACE Wi-Fi, HALO's SSH address
-is `Pi_Mz@10.42.10.2`.
+Sign in to the HALO Pi as `<halo-user>` and run these commands from
+`/path/to/pace-routing/HALO/`. On PACE Wi-Fi, HALO's SSH address
+is `<halo-user>@10.42.10.2`.
 
 ```bash
 sudo install -m 644 config/99-halo-redis.conf /etc/sysctl.d/99-halo-redis.conf
@@ -122,7 +122,7 @@ before recording. The local capture validates the camera timestamps against a
 plausible clock, and a failed validation leaves a hidden `.partial` session.
 
 ```bash
-cd /home/Pi_Mz/Documents/pace-routing/HALO &&
+cd /path/to/pace-routing/HALO &&
 mkdir -p data &&
 sudo docker compose stop uploader &&
 sudo docker compose up -d --no-build redis extractor &&

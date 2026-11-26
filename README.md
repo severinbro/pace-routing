@@ -7,7 +7,8 @@ and PACE interface stay at the repository root. Each Pi runs only its own stack:
 
 ```text
 pace-routing/
-├── data_cube/ pace/ static/ templates/   # Shared Django app
+├── data_cube/ pace/ static/ templates/   # Shared Django app (logos in static/img/)
+├── scripts/                            # Post-processing & enrichment scripts
 ├── SENSE/                              # HTTPS, receiver, dashboard, DB, Redis, NTP
 │   ├── compose.yaml
 │   ├── config/ dashboard/ receiver/ tests/
@@ -22,8 +23,8 @@ Run `docker compose` from the directory for the Pi you are operating.
 
 | Device | Linux account | Compose directory | PACE Wi-Fi address |
 |---|---|---|---|
-| SENSE | `pacesense` | `/home/pacesense/Documents/development/pace-routing/SENSE/` | `10.42.10.1` |
-| HALO | `Pi_Mz` | `/home/Pi_Mz/Documents/pace-routing/HALO/` | `10.42.10.2` |
+| SENSE | `<sense-user>` | `/path/to/pace-routing/SENSE/` | `10.42.10.1` |
+| HALO | `<halo-user>` | `/path/to/pace-routing/HALO/` | `10.42.10.2` |
 
 Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
@@ -206,7 +207,7 @@ The Pi broadcasts its own offline network so participants can connect in the fie
 
 1. Create the hotspot (a USB Wi-Fi dongle is recommended for range and stability):
 ```bash
-sudo nmcli device wifi hotspot ifname wlan1 ssid "pace" password "pace2026"
+sudo nmcli device wifi hotspot ifname wlan1 ssid "pace" password "<wifi-password>"
 sudo nmcli connection modify Hotspot connection.autoconnect yes connection.autoconnect-retries 0
 ```
 
@@ -276,7 +277,7 @@ Other endpoints (only reachable from the hotspot network):
 | URL | Purpose |
 |-----|---------|
 | `http://10.42.0.1:8080` | Map tile server (used internally by Leaflet) |
-| `http://10.42.0.1:5050` | pgAdmin (login: `admin@pace.io` / `pace`) |
+| `http://10.42.0.1:5050` | pgAdmin (credentials configured in `docker-compose.yml`) |
 | `http://10.42.0.1:8081` | HTTP redirect to HTTPS |
 
 ### 8. GNSS & system time

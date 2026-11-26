@@ -1,15 +1,39 @@
 sensor_test.py
 gnss_module_test.py
 camera_test.py
-data/maps
-data/pgadmin_data
-data/postgres
 examples
-nginx/certs
 Cooking_Recipe.md
 output_files_debug
+
+# Runtime data, certificates & collected static assets
+data/
+nginx/certs/
+staticfiles/
+
+# Python, virtual environments, editor & OS files
 __pycache__/
 *.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.sqlite3
+*.log
+
+# Generic secrets and environment files (keep *.example templates)
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+*.token
+*.key
+*.pem
+*.crt
+
+# SENSE & HALO deployment secrets and runtime data
 SENSE/.env
 SENSE/config/upload.token
 SENSE/config/certs/
