@@ -70,3 +70,23 @@ class DashboardControlTests(unittest.TestCase):
             'sudo', '-n', '/usr/bin/systemd-run', '--unit=halo-ui-poweroff',
             '--on-active=2s', '/usr/bin/systemctl', 'poweroff'
         )
+
+    def test_telemetry_reads_latest_imu_light_and_outbox(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            sdir = data / 'sessions' / '20261126T120000.000Z-halo-1'
+            sdir.mkdir(parents=True)
+            (sdir / 'imu.csv').write_text(
+                'utc_ns,accel_x_m_s2,accel_y_m_s2,accel_z_m_s2,gyro_x_rad_s,gyro_y_rad_s,gyro_z_rad_s,quat_i,quat_j,quat_k,quat_real\n'
+                '1000,0.1,0.2,9.8,0.0,0.0,0.0,0.0,0.0,0.0,1.0\n'
+            )
+            (sdir / 'light.csv').write_text('utc_ns,lux\n1000,123.5\n')
+            outbox = data / 'live_outbox' / '20261126T120000.000Z-halo-1'
+            outbox.mkdir(parents=True)
+            (outbox / 'frame_000000.meta.json').write_text('{}')
+            with patch.object(controller, 'DATA', data), patch.object(controller, 'SESSIONS', data / 'sessions'), patch.object(controller, 'active', return_value=False):
+                tel = controller.telemetry()
+            self.assertEqual(tel['live_outbox_frames'], 1)
+            self.assertEqual(tel['light']['lux'], 123.5)
+            self.assertAlmostEqual(tel['imu']['accel_z'], 9.8, places=2)
+            self.assertAlmostEqual(tel['imu']['pitch_deg'], 0.0, places=2)

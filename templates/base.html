@@ -26,14 +26,20 @@
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' %}active{% endif %}" href="{% url 'sense_home' %}">
                     <i class="bi bi-cpu"></i> <span>SENSE</span>
                 </a>
-                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' %}active{% endif %}" href="{% url 'halo_home' %}">
+                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' or request.resolver_match.url_name == 'halo_dashboard' or request.resolver_match.url_name == 'halo_data' %}active{% endif %}" href="{% url 'halo_home' %}">
                     <i class="bi bi-camera-video"></i> <span>HALO</span>
                 </a>
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' or request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'campaign_hub' %}" title="Campaigns &amp; Participants">
+                    <i class="bi bi-clipboard2-data-fill"></i>
+                </a>
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}" title="Map">
+                    <i class="bi bi-map"></i>
+                </a>
+            {% else %}
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Survey">
+                    <i class="bi bi-clipboard-check"></i>
+                </a>
             {% endif %}
-
-            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Survey">
-                <i class="bi bi-clipboard-check"></i>
-            </a>
 
             {% if request.user.is_authenticated %}
                 <form class="nav-item d-flex ms-auto" method="post" action="{% url 'admin_logout' %}">

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """HALO local control entrypoint. Exposed to SENSE only through a forced SSH command."""
+import csv
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import pwd
@@ -101,6 +103,119 @@ def sessions():
     return [session_info(p) for p in sorted(SESSIONS.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True) if p.is_dir()][:50]
 
 
+def _tail_csv_row(path):
+    """Read the CSV header and last non-empty row without loading large files."""
+    if not path.is_file():
+        return None
+    try:
+        with path.open('rb') as stream:
+            header_line = stream.readline().decode('utf-8', 'replace').strip()
+            if not header_line:
+                return None
+            stream.seek(0, os.SEEK_END)
+            size = stream.tell()
+            seek_pos = max(0, size - 4096)
+            stream.seek(seek_pos)
+            tail_lines = [line.strip() for line in stream.read().decode('utf-8', 'replace').splitlines() if line.strip()]
+    except OSError:
+        return None
+    if not tail_lines:
+        return None
+    last_line = tail_lines[-1]
+    if last_line == header_line:
+        return None
+    try:
+        rows = list(csv.DictReader([header_line, last_line]))
+        return rows[0] if rows else None
+    except csv.Error:
+        return None
+
+
+def _float_or_none(value):
+    try:
+        num = float(value)
+        return num if math.isfinite(num) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _quat_to_euler_deg(qi, qj, qk, qr):
+    if None in (qi, qj, qk, qr):
+        return None, None, None
+    norm = math.sqrt(qi * qi + qj * qj + qk * qk + qr * qr)
+    if norm == 0.0:
+        return None, None, None
+    x, y, z, w = qi / norm, qj / norm, qk / norm, qr / norm
+    r20 = 2.0 * (x * z - y * w)
+    r21 = 2.0 * (y * z + x * w)
+    r22 = 1.0 - 2.0 * (x * x + y * y)
+    r10 = 2.0 * (x * y + z * w)
+    r00 = 1.0 - 2.0 * (y * y + z * z)
+    sy = max(-1.0, min(1.0, -r20))
+    return round(math.degrees(math.asin(sy)), 2), round(math.degrees(math.atan2(r21, r22)), 2), round(math.degrees(math.atan2(r10, r00)), 2)
+
+
+def telemetry():
+    """Return latest BNO085 IMU and BH1750 light readings plus live outbox count."""
+    is_live = active()
+    candidates = []
+    if SESSIONS.is_dir():
+        dirs = [p for p in SESSIONS.iterdir() if p.is_dir()]
+        dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        if is_live:
+            partials = [p for p in dirs if p.name.startswith('.') and p.name.endswith('.partial')]
+            candidates = partials + [p for p in dirs if p not in partials]
+        else:
+            candidates = dirs
+
+    imu_data = None
+    light_data = None
+    source_mode = 'live' if is_live else 'latest_session'
+    for folder in candidates[:10]:
+        sid = folder.name.lstrip('.').removesuffix('.partial')
+        if imu_data is None:
+            row = _tail_csv_row(folder / 'imu.csv')
+            if row:
+                qi = _float_or_none(row.get('quat_i'))
+                qj = _float_or_none(row.get('quat_j'))
+                qk = _float_or_none(row.get('quat_k'))
+                qr = _float_or_none(row.get('quat_real'))
+                pitch, roll, yaw = _quat_to_euler_deg(qi, qj, qk, qr)
+                imu_data = {
+                    'session_id': sid,
+                    'source': source_mode,
+                    'utc_ns': int(row['utc_ns']) if str(row.get('utc_ns', '')).isdigit() else None,
+                    'accel_x': _float_or_none(row.get('accel_x_m_s2')),
+                    'accel_y': _float_or_none(row.get('accel_y_m_s2')),
+                    'accel_z': _float_or_none(row.get('accel_z_m_s2')),
+                    'gyro_x': _float_or_none(row.get('gyro_x_rad_s')),
+                    'gyro_y': _float_or_none(row.get('gyro_y_rad_s')),
+                    'gyro_z': _float_or_none(row.get('gyro_z_rad_s')),
+                    'pitch_deg': pitch,
+                    'roll_deg': roll,
+                    'yaw_deg': yaw,
+                }
+        if light_data is None:
+            row = _tail_csv_row(folder / 'light.csv')
+            if row:
+                light_data = {
+                    'session_id': sid,
+                    'source': source_mode,
+                    'utc_ns': int(row['utc_ns']) if str(row.get('utc_ns', '')).isdigit() else None,
+                    'lux': _float_or_none(row.get('lux')),
+                }
+        if imu_data is not None and light_data is not None:
+            break
+
+    outbox = DATA / 'live_outbox'
+    outbox_count = sum(1 for _ in outbox.rglob('frame_*.meta.json')) if outbox.is_dir() else 0
+    return {
+        'imu': imu_data,
+        'light': light_data,
+        'live_outbox_frames': outbox_count,
+    }
+
+
 def status():
     state = load_json(STATE)
     running = active()
@@ -118,7 +233,8 @@ def status():
             stage = items[0]['stage']
     return {'online': True, 'recording_active': running, 'stage': stage,
             'session_id': state.get('session_id'), 'stop_reason': state.get('stop_reason'),
-            'error': state.get('error'), 'readiness': readiness(), 'sessions': items}
+            'error': state.get('error'), 'readiness': readiness(),
+            'telemetry': telemetry(), 'sessions': items}
 
 
 def start():

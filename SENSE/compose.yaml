@@ -105,6 +105,7 @@ services:
     volumes:
       - ./config/dashboard-internal.token:/config/dashboard-internal.token:ro
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - ${PACE_DATA_DIR:-./data}:/data:ro
     depends_on:
       pace-db:
         condition: service_healthy

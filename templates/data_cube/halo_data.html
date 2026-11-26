@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-coral mx-auto mb-3">
+            <i class="bi bi-database-fill"></i>
+        </div>
+        <h2 class="fw-bold">HALO Data Browser</h2>
+        <p class="text-muted">Browse and export transferred HALO stereo, IMU, light, and thermal sessions on SENSE.</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <a href="{% url 'halo_home' %}" class="btn btn-pace-outline"><i class="bi bi-camera-video"></i> HALO Control</a>
+            <a href="{% url 'halo_dashboard' %}" class="btn btn-pace-mint"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-4">
+            <div class="pace-card p-3 text-center h-100">
+                <small class="text-muted text-uppercase fw-bold">Sessions</small>
+                <div class="fs-3 fw-bold">{{ total_sessions }}</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="pace-card p-3 text-center h-100">
+                <small class="text-muted text-uppercase fw-bold">Stereo Pairs</small>
+                <div class="fs-3 fw-bold">{{ total_pairs }}</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="pace-card p-3 text-center h-100">
+                <small class="text-muted text-uppercase fw-bold">Live Frames (v2)</small>
+                <div class="fs-3 fw-bold">{{ total_live_frames }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="pace-card p-4 mb-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-download"></i></div>
+            Export Summary
+        </div>
+        <p class="text-muted mb-3">
+            Download a CSV overview of all received HALO sessions (timing, stereo pairs, skew, IMU gaps, light, thermal, and live v2 frame counts),
+            or export individual CSV/JSON manifests and ZIP archives per session below.
+        </p>
+        <a href="{% url 'halo_export_summary_csv' %}" class="btn btn-pace-mint">
+            <i class="bi bi-file-earmark-spreadsheet-fill"></i> Export All Sessions Summary (CSV)
+        </a>
+    </div>
+
+    <div class="pace-card p-4">
+        <div class="pace-section-title">
+            <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-folder2-open"></i></div>
+            Transferred Sessions ({{ sessions|length }})
+        </div>
+        <div class="table-responsive">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Session</th>
+                        <th>Started (UTC)</th>
+                        <th>Pairs</th>
+                        <th>Skew / IMU Gaps</th>
+                        <th>Live</th>
+                        <th>Size</th>
+                        <th>CSV / JSON Artifacts</th>
+                        <th>Archive</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in sessions %}
+                    <tr>
+                        <td class="font-monospace small">{{ item.id }}</td>
+                        <td class="small">{{ item.started_at_utc|default:"—" }}</td>
+                        <td>{{ item.pairs|default:"—" }}</td>
+                        <td class="small">{{ item.skew_exceeded|default:"—" }} / {{ item.imu_gaps|default:"—" }}</td>
+                        <td>{{ item.live_frames }}</td>
+                        <td class="small">{{ item.size_mib }} MiB</td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                {% for art in item.artifacts %}
+                                <a class="btn btn-sm btn-outline-dark" href="{% url 'halo_export_artifact' item.id art %}">{{ art }}</a>
+                                {% empty %}
+                                <span class="text-muted small">None</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1 flex-wrap">
+                                <a class="btn btn-sm btn-pace-mint" href="{% url 'halo_export_zip' item.id %}">Metadata ZIP</a>
+                                <a class="btn btn-sm btn-pace-sky" href="{% url 'halo_export_zip' item.id %}?include_frames=1">Full ZIP</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">No transferred HALO sessions on SENSE yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

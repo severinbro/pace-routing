@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<script src="{% static 'js/chart.umd.js' %}"></script>
+
+<div class="container-fluid p-0">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="bi bi-camera-video"></i> HALO Sensor Dashboard</h2>
+            <small class="text-muted" id="halo-telemetry-source">Polling HALO telemetry…</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'halo_home' %}" class="btn btn-pace-outline btn-sm"><i class="bi bi-sliders"></i> HALO Control</a>
+            <a href="{% url 'halo_data' %}" class="btn btn-pace-sky btn-sm"><i class="bi bi-database"></i> Data &amp; Export</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <!-- Card 1: HALO System & Sync -->
+        <div class="col-md-4">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-cpu"></i></div>
+                    System &amp; Sync
+                </div>
+                <div class="d-flex flex-column gap-1">
+                    <div class="pace-data-row">
+                        <span class="label">Connection</span>
+                        <span class="value" id="halo-conn">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Stage</span>
+                        <span class="value" id="halo-stage">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Clock Sync</span>
+                        <span class="value" id="halo-ntp">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Storage Free</span>
+                        <span class="value"><span id="halo-free">--</span> GiB</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Live Outbox</span>
+                        <span class="value"><span id="halo-outbox">--</span> frames</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 2: Cameras & Thermal -->
+        <div class="col-md-4">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-camera-video"></i></div>
+                    Optics &amp; Thermal
+                </div>
+                <div class="text-center mb-3">
+                    <span class="pace-badge bg-white" id="ready-badge">
+                        Readiness: <span id="ready-label">--</span>
+                    </span>
+                </div>
+                <div class="d-flex flex-column gap-1">
+                    <div class="pace-data-row">
+                        <span class="label">Stereo RGB</span>
+                        <span class="value small" id="check-cameras">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Thermal (LWIR)</span>
+                        <span class="value small" id="check-thermal">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">BNO085 / BH1750</span>
+                        <span class="value small" id="check-i2c">--</span>
+                    </div>
+                    <div class="pace-data-row">
+                        <span class="label">Session</span>
+                        <span class="value font-monospace small" id="halo-session">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Ambient Light (BH1750) -->
+        <div class="col-md-4">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-brightness-high-fill"></i></div>
+                    Ambient Light (BH1750)
+                </div>
+                <div class="d-flex justify-content-center align-items-end mb-2">
+                    <span class="pace-big-num me-2" id="light-lux">--</span>
+                    <span class="text-muted pb-2 fs-5">lux</span>
+                </div>
+                <div style="height: 110px;">
+                    <canvas id="lightChart"></canvas>
+                </div>
+                <small class="text-center text-muted mt-1 d-block" id="light-source">Illuminance (lux)</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: Motion & Orientation (BNO085) -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-12">
+            <div class="pace-card h-100 p-4">
+                <div class="pace-section-title">
+                    <div class="pace-icon-tile pace-icon-tile-lavender"><i class="bi bi-activity"></i></div>
+                    Motion &amp; Orientation (BNO085)
+                </div>
+                <div class="row">
+                    <div class="col-md-6 border-end border-3">
+                        <h6 class="text-center text-muted small text-uppercase">Acceleration (m/s²)</h6>
+                        <div style="height: 200px;"><canvas id="accelChart"></canvas></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-center text-muted small text-uppercase">Rotation (Degrees)</h6>
+                        <div style="height: 200px;"><canvas id="gyroChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="row text-center mt-3 g-2">
+                    <div class="col-4 border-end border-3"><small class="text-muted d-block">Pitch (X)</small><span class="fw-bold fs-5" id="angPitch">--</span>°</div>
+                    <div class="col-4 border-end border-3"><small class="text-muted d-block">Roll (Y)</small><span class="fw-bold fs-5" id="angRoll">--</span>°</div>
+                    <div class="col-4"><small class="text-muted d-block">Yaw (Z)</small><span class="fw-bold fs-5" id="angYaw">--</span>°</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const MAX_DATA_POINTS = 30;
+    const statusUrl = '{% url "halo_status" %}';
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        elements: { point: { radius: 0 }, line: { borderWidth: 2, tension: 0.3 } },
+        scales: { x: { display: false }, y: { beginAtZero: false } },
+        plugins: { legend: { position: 'top', labels: { boxWidth: 10 } } }
+    };
+
+    const accelChart = new Chart(document.getElementById('accelChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [
+                { label: 'Acc X', borderColor: '#FF6B6B', data: [] },
+                { label: 'Acc Y', borderColor: '#4ECDC4', data: [] },
+                { label: 'Acc Z', borderColor: '#B19CD9', data: [] }
+            ]
+        },
+        options: chartOptions
+    });
+
+    const gyroChart = new Chart(document.getElementById('gyroChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [
+                { label: 'Pitch', borderColor: '#FFD93D', data: [] },
+                { label: 'Roll', borderColor: '#6EC6FF', data: [] },
+                { label: 'Yaw', borderColor: '#FF6B6B', data: [] }
+            ]
+        },
+        options: chartOptions
+    });
+
+    const lightChart = new Chart(document.getElementById('lightChart'), {
+        type: 'line',
+        data: {
+            labels: Array(MAX_DATA_POINTS).fill(''),
+            datasets: [{
+                label: 'Lux',
+                borderColor: '#FFD93D',
+                backgroundColor: 'rgba(255, 217, 61, 0.15)',
+                data: [],
+                fill: true
+            }]
+        },
+        options: {
+            ...chartOptions,
+            scales: { x: { display: false }, y: { beginAtZero: true } }
+        }
+    });
+
+    function pushSeries(chart, values) {
+        values.forEach((val, idx) => {
+            chart.data.datasets[idx].data.push(val);
+            if (chart.data.datasets[idx].data.length > MAX_DATA_POINTS) {
+                chart.data.datasets[idx].data.shift();
+            }
+        });
+        chart.update('none');
+    }
+
+    function setText(id, val) {
+        document.getElementById(id).textContent = val;
+    }
+
+    function refresh() {
+        fetch(statusUrl, { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(payload => {
+                const halo = payload.halo || {};
+                const ready = halo.readiness || {};
+                const checks = ready.checks || {};
+                const tel = halo.telemetry || {};
+                const imu = tel.imu || null;
+                const light = tel.light || null;
+
+                const conn = document.getElementById('halo-conn');
+                conn.textContent = halo.online ? 'Online' : 'Offline';
+                conn.className = 'value ' + (halo.online ? 'text-success' : 'text-danger');
+                setText('halo-stage', (halo.stage || 'offline').replaceAll('_', ' '));
+                setText('halo-ntp', checks.time_sync ? (checks.time_sync.ok ? 'Synced' : 'Unsynced') : '--');
+                setText('halo-free', ready.free_bytes != null ? (ready.free_bytes / 1073741824).toFixed(1) : '--');
+                setText('halo-outbox', tel.live_outbox_frames != null ? tel.live_outbox_frames : '--');
+
+                const readyBadge = document.getElementById('ready-badge');
+                const readyLabel = document.getElementById('ready-label');
+                readyLabel.textContent = ready.ready ? 'Ready' : 'Blocked';
+                readyBadge.style.background = ready.ready ? '#4ECDC4' : '#FF6B6B';
+                readyBadge.style.color = '#fff';
+
+                setText('check-cameras', checks.stereo_cameras ? checks.stereo_cameras.detail : '--');
+                setText('check-thermal', checks.thermal ? (checks.thermal.ok ? 'OK' : 'Missing') : '--');
+                const imuOk = checks.imu && checks.imu.ok ? 'OK' : 'Missing';
+                const lightOk = checks.light && checks.light.ok ? 'OK' : 'Missing';
+                setText('check-i2c', imuOk + ' / ' + lightOk);
+                setText('halo-session', halo.session_id || (imu && imu.session_id) || '—');
+
+                if (light && light.lux != null) {
+                    setText('light-lux', Number(light.lux).toFixed(1));
+                    setText('light-source', light.source === 'live' ? 'Live BH1750 (lux)' : 'Latest session: ' + light.session_id);
+                    pushSeries(lightChart, [Number(light.lux)]);
+                } else {
+                    setText('light-lux', '--');
+                }
+
+                if (imu) {
+                    setText('angPitch', imu.pitch_deg != null ? Number(imu.pitch_deg).toFixed(1) : '--');
+                    setText('angRoll', imu.roll_deg != null ? Number(imu.roll_deg).toFixed(1) : '--');
+                    setText('angYaw', imu.yaw_deg != null ? Number(imu.yaw_deg).toFixed(1) : '--');
+                    setText('halo-telemetry-source', imu.source === 'live'
+                        ? 'Live stream from active recording (' + imu.session_id + ')'
+                        : 'Showing latest recorded session (' + imu.session_id + ')');
+                    if (imu.accel_x != null && imu.accel_y != null && imu.accel_z != null) {
+                        pushSeries(accelChart, [imu.accel_x, imu.accel_y, imu.accel_z]);
+                    }
+                    if (imu.pitch_deg != null && imu.roll_deg != null && imu.yaw_deg != null) {
+                        pushSeries(gyroChart, [imu.pitch_deg, imu.roll_deg, imu.yaw_deg]);
+                    }
+                } else {
+                    setText('halo-telemetry-source', halo.online ? 'HALO online — no IMU samples yet.' : (halo.error || 'HALO offline'));
+                }
+            })
+            .catch(err => {
+                setText('halo-telemetry-source', 'Error polling HALO status: ' + err.message);
+            });
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+})();
+</script>
+{% endblock %}

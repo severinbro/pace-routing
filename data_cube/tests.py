@@ -1,8 +1,13 @@
 """Integration checks for the SENSE/HALO admin split."""
+import io
+import json
+from pathlib import Path
+import tempfile
 from unittest.mock import patch
+import zipfile
 
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 
@@ -17,14 +22,57 @@ class PlatformNavigationTests(TestCase):
         about_resp = self.client.get(reverse('about'))
         self.assertContains(about_resp, 'SENSE')
         self.assertContains(about_resp, 'HALO')
+        self.assertContains(about_resp, reverse('campaign_hub'))
+        self.assertContains(about_resp, reverse('map_tab'))
         self.assertContains(self.client.get(reverse('sense_home')), 'sensor worker')
         self.assertContains(self.client.get(reverse('halo_home')), 'Recording control')
+        self.assertContains(self.client.get(reverse('halo_dashboard')), 'HALO Sensor Dashboard')
+        self.assertContains(self.client.get(reverse('campaign_hub')), reverse('create_user'))
 
     def test_participant_cannot_open_halo(self):
         self.client.force_login(self.participant)
-        response = self.client.get(reverse('halo_home'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/login/', response['Location'])
+        for route in ('halo_home', 'halo_dashboard', 'halo_data'):
+            response = self.client.get(reverse(route))
+            self.assertEqual(response.status_code, 302)
+            self.assertIn('/login/', response['Location'])
+        about_resp = self.client.get(reverse('about'))
+        self.assertNotContains(about_resp, reverse('campaign_hub'))
+        self.assertContains(about_resp, reverse('surveys_tab'))
+
+    def test_halo_data_browser_and_exports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sid = '20261126T120000.000Z-halo-1'
+            sdir = root / 'incoming' / sid
+            (sdir / 'frames' / 'left').mkdir(parents=True)
+            (sdir / 'frames' / 'left' / 'frame_000000.jpg').write_bytes(b'\xff\xd8\xff\xd9')
+            (sdir / 'capture.json').write_text(json.dumps({'started_at_utc': '2026-11-26T12:00:00Z', 'clip_duration_seconds': 10}))
+            (sdir / 'sync_report.json').write_text(json.dumps({'pairs': 5, 'pairs_exceeding_stereo_skew_limit': 0, 'pairs_without_close_imu_bracket': 0}))
+            (sdir / 'pairs.csv').write_text('pair_index,left_frame\n0,frame_000000.jpg\n')
+            with override_settings(SENSE_DATA_DIR=root):
+                self.client.force_login(self.staff)
+                page = self.client.get(reverse('halo_data'))
+                self.assertContains(page, sid)
+                summary = self.client.get(reverse('halo_export_summary_csv'))
+                self.assertEqual(summary.status_code, 200)
+                self.assertIn(sid, summary.content.decode())
+                artifact = self.client.get(reverse('halo_export_artifact', args=[sid, 'pairs.csv']))
+                self.assertEqual(artifact.status_code, 200)
+                artifact_bytes = b''.join(artifact.streaming_content)
+                artifact.close()
+                self.assertIn(b'pair_index', artifact_bytes)
+                bad_artifact = self.client.get(reverse('halo_export_artifact', args=[sid, 'secret.txt']))
+                self.assertEqual(bad_artifact.status_code, 400)
+                missing = self.client.get(reverse('halo_export_artifact', args=['missing-session', 'pairs.csv']))
+                self.assertEqual(missing.status_code, 404)
+                zip_resp = self.client.get(reverse('halo_export_zip', args=[sid]))
+                self.assertEqual(zip_resp.status_code, 200)
+                zip_bytes = b''.join(zip_resp.streaming_content)
+                zip_resp.close()
+                with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                    names = zf.namelist()
+                    self.assertIn(f'{sid}/pairs.csv', names)
+                    self.assertNotIn(f'{sid}/frames/left/frame_000000.jpg', names)
 
     def test_halo_actions_require_post_and_csrf(self):
         client = Client(enforce_csrf_checks=True)
