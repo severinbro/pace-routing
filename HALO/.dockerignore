@@ -1,4 +1,5 @@
 data/
+3d_print_files/
 config/capture.env
 config/halo-upload.token
 config/sense-server.crt

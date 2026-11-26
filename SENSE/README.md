@@ -44,6 +44,7 @@ Dieses Verzeichnis enthält den containerisierten Upload- und Empfangsdienst fü
 pace-routing/SENSE/
 ├── compose.yaml              # Docker Compose (Nginx, Receiver, Dashboard, PACE web, DB, Redis, NTP)
 ├── .env.example              # Vorlage für Ports, UIDs, Pfade
+├── 3d_print_files/           # SENSE-Gehäuse & Halterung (STL/Blender)
 ├── config/
 │   ├── nginx.conf            # Nginx-Vorlage für Streaming und HTTPS-Weiterleitung
 │   ├── receiver.env.example  # Backend-Konfiguration

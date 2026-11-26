@@ -10,6 +10,5 @@ venv/
 .env.*
 nginx/certs/
 staticfiles/
-3d_print_files/
 SENSE/
 HALO/

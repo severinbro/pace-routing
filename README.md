@@ -11,10 +11,12 @@ pace-routing/
 ├── scripts/                            # Post-processing & enrichment scripts
 ├── SENSE/                              # HTTPS, receiver, dashboard, DB, Redis, NTP
 │   ├── compose.yaml
+│   ├── 3d_print_files/                 # SENSE enclosure CAD/STL files
 │   ├── config/ dashboard/ receiver/ tests/
 │   └── data/                           # Live SENSE data only on SENSE Pi
 └── HALO/                               # Capture, extraction, upload, control
     ├── compose.yaml
+    ├── 3d_print_files/                 # HALO V5 STL print files
     ├── capture/ control/ config/ tests/
     └── data/                           # Live HALO data only on HALO Pi
 ```

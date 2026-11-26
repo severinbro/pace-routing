@@ -1,6 +1,7 @@
 .git/
 .env
 .env.*
+3d_print_files/
 data/
 config/certs/
 config/upload.token
