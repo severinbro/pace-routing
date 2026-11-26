@@ -15,7 +15,7 @@ SENSE/config/upload.token
 SENSE/config/certs/
 SENSE/config/dashboard-auth.json
 SENSE/config/halo-dashboard-key*
-SENSE/config/halo-known-hosts
+SENSE/config/halo-known-hosts*
 SENSE/config/dashboard-internal.token
 SENSE/config/pace.env
 SENSE/data/

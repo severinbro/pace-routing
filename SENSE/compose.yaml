@@ -50,6 +50,8 @@ services:
     image: sense-dashboard:local
     container_name: sense-dashboard
     restart: unless-stopped
+    environment:
+      HALO_SSH_TARGET: "${HALO_SSH_TARGET:-pacehalo@10.42.10.2}"
     volumes:
       - ${PACE_DATA_DIR:-./data}:/data:ro
       - ./config/dashboard-auth.json:/config/dashboard-auth.json:ro
