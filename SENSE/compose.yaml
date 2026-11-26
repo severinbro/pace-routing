@@ -39,7 +39,11 @@ services:
       LISTEN_HOST: "0.0.0.0"
       LISTEN_PORT: 8000
       PROTOCOL_VERSION: "1"
+      REDIS_HOST: "pace-redis"
+      MIN_FREE_DISK_MB: "2048"
       LOG_LEVEL: "INFO"
+    depends_on:
+      - pace-redis
     networks:
       - sense-net
 
@@ -81,6 +85,9 @@ services:
     image: redis:7-alpine
     container_name: sense-pace-redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/pace-redis:/data
     networks:
       sense-net:
         aliases:

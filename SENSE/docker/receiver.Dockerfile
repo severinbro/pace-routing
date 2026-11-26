@@ -5,8 +5,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# The receiver server uses strictly Python standard library modules (http.server, hashlib, tarfile, json, etc.)
-# No external pip dependencies required, ensuring instant builds and ARM64 stability on Raspberry Pi OS.
+RUN pip install --no-cache-dir 'redis>=5,<7'
 
 COPY receiver/ /app/receiver/
 

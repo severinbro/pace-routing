@@ -36,6 +36,7 @@ services:
       - /sys:/sys:ro
       - ${PACE_DATA_DIR:-./data}:/data
       - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+      - ./capture/bin:/app/capture/bin:ro
     environment:
       HOME: /tmp
       REDIS_HOST: redis
@@ -53,6 +54,7 @@ services:
     volumes:
       - ${PACE_DATA_DIR:-./data}:/data
       - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+      - ./capture/bin:/app/capture/bin:ro
     environment:
       HOME: /tmp
       REDIS_HOST: redis
@@ -74,8 +76,10 @@ services:
     volumes:
       - ${PACE_DATA_DIR:-./data}:/data
       - ${PACE_CONFIG_FILE:-./config/capture.env}:/etc/halo-camera/capture.env:ro
+      - ./capture/bin:/app/capture/bin:ro
       - ./config/halo-upload.token:/run/secrets/halo-upload-token:ro
       - ./config/sense-server.crt:/run/secrets/sense-ca.crt:ro
+      - ./config:/etc/halo-camera/config:ro
     environment:
       HOME: /tmp
     depends_on:

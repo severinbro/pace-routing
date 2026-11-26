@@ -8,6 +8,8 @@ sessions from HALO over HTTP/HTTPS:
 """
 
 from datetime import datetime, timezone
+from email.parser import BytesParser
+from email.policy import default as email_default_policy
 import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,11 +25,61 @@ import time
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
+try:
+    import redis as redis_lib
+except ImportError:
+    redis_lib = None
+
 from verify import verify_session_structure
 
 LOG = logging.getLogger("halo-receiver")
 SESSION_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}\Z")
+LIVE_FRAMES_PATH_RE = re.compile(r"^/halo-upload/v2/sessions/([^/]+)/frames\Z")
+MAX_LIVE_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_LIVE_REQUEST_BYTES = 10 * 1024 * 1024
+LIVE_QUEUE_KEY = "halo:live:queue"
+_LIVE_QUEUE_LOCK = threading.Lock()
+_REDIS_CLIENT = None
+
+
+def get_redis_client():
+    global _REDIS_CLIENT
+    host = os.environ.get("REDIS_HOST", "").strip()
+    if not host or redis_lib is None:
+        return None
+    if _REDIS_CLIENT is None:
+        port = int(os.environ.get("REDIS_PORT", "6379"))
+        _REDIS_CLIENT = redis_lib.Redis(host=host, port=port, db=0, decode_responses=True)
+    return _REDIS_CLIENT
+
+
+def enqueue_live_job(root: Path, session_id: str, frame_index: int, frame_dir_rel: str) -> None:
+    client = get_redis_client()
+    if client is None:
+        return
+    max_len = int(os.environ.get("LIVE_QUEUE_MAX_LEN", "256"))
+    payload = json.dumps({
+        "session_id": session_id,
+        "frame_index": frame_index,
+        "frame_dir": frame_dir_rel,
+    })
+    live_root = (root / "live").resolve()
+    with _LIVE_QUEUE_LOCK:
+        client.rpush(LIVE_QUEUE_KEY, payload)
+        while client.llen(LIVE_QUEUE_KEY) > max_len:
+            evicted_raw = client.lpop(LIVE_QUEUE_KEY)
+            if not evicted_raw:
+                break
+            try:
+                evicted = json.loads(evicted_raw)
+                rel = str(evicted.get("frame_dir") or "")
+                if rel:
+                    target = (live_root / rel).resolve()
+                    if target.is_relative_to(live_root) and target != live_root and target.exists():
+                        shutil.rmtree(target, ignore_errors=True)
+            except (ValueError, OSError) as exc:
+                LOG.warning("Failed cleaning evicted live frame dir: %s", exc)
 
 
 def write_progress(root: Path, session_id: str, state: str, received: int,
@@ -129,11 +181,144 @@ class ReceiverHandler(BaseHTTPRequestHandler):
                 "status": "healthy",
                 "service": "sense-receiver",
                 "protocol_version": 1,
+                "live_protocol_version": 2,
                 "utc": datetime.now(timezone.utc).isoformat()
             })
             return
 
         self.send_error_json(HTTPStatus.NOT_FOUND, f"Path not found: {parsed.path}")
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+        match = LIVE_FRAMES_PATH_RE.fullmatch(path)
+        if not match:
+            self.send_error_json(HTTPStatus.NOT_FOUND, f"Endpoint not found: {path}")
+            return
+
+        session_id = match.group(1)
+        if not SESSION_NAME_RE.match(session_id):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, f"Invalid session ID: '{session_id}'")
+            return
+
+        if not self.authenticate():
+            return
+
+        root = self.receiver_root
+        root.mkdir(parents=True, exist_ok=True)
+        min_free_mb = int(os.environ.get("MIN_FREE_DISK_MB", "2048"))
+        if shutil.disk_usage(root).free < min_free_mb * 1024 * 1024:
+            self.send_error_json(HTTPStatus.INSUFFICIENT_STORAGE, "Insufficient free disk space on SENSE")
+            return
+
+        content_length_str = self.headers.get("Content-Length")
+        if not content_length_str or not content_length_str.isdigit():
+            self.send_error_json(HTTPStatus.LENGTH_REQUIRED, "Content-Length header required")
+            return
+        content_length = int(content_length_str)
+        if content_length > MAX_LIVE_REQUEST_BYTES:
+            self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Live frame payload exceeds 10 MB limit")
+            return
+
+        content_type = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in content_type.lower():
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Content-Type must be multipart/form-data")
+            return
+
+        raw_body = self.rfile.read(content_length)
+        if len(raw_body) != content_length:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Incomplete request body")
+            return
+
+        header_blob = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+        message = BytesParser(policy=email_default_policy).parsebytes(header_blob + raw_body)
+        if not message.is_multipart():
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Malformed multipart/form-data body")
+            return
+
+        image_bytes: Optional[bytes] = None
+        meta_bytes: Optional[bytes] = None
+        for part in message.iter_parts():
+            field_name = part.get_param("name", header="content-disposition")
+            if field_name == "image":
+                image_bytes = part.get_payload(decode=True)
+            elif field_name == "meta":
+                meta_bytes = part.get_payload(decode=True)
+
+        if not image_bytes or not meta_bytes:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Both 'image' and 'meta' multipart fields are required")
+            return
+        if len(image_bytes) > MAX_LIVE_IMAGE_BYTES:
+            self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Live frame image exceeds 5 MB limit")
+            return
+
+        try:
+            meta = json.loads(meta_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid JSON in 'meta' field")
+            return
+
+        if not isinstance(meta, dict):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "'meta' must be a JSON object")
+            return
+        meta_session = meta.get("session_id")
+        if meta_session and meta_session != session_id:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "meta.session_id does not match URL session_id")
+            return
+        frame_index = meta.get("frame_index")
+        capture_utc_ns = meta.get("capture_utc_ns")
+        if not isinstance(frame_index, int) or isinstance(frame_index, bool) or frame_index < 0:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "meta.frame_index must be a non-negative integer")
+            return
+        if not isinstance(capture_utc_ns, int) or isinstance(capture_utc_ns, bool) or capture_utc_ns < 0:
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "meta.capture_utc_ns must be a non-negative integer")
+            return
+
+        frame_dir_rel = f"{session_id}/frame_{frame_index:06d}"
+        live_root = (root / "live").resolve()
+        frame_dir = (live_root / frame_dir_rel).resolve()
+        if not frame_dir.is_relative_to(live_root):
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Unsafe live frame path")
+            return
+
+        lock = get_session_lock(f"live:{frame_dir_rel}")
+        with lock:
+            meta_file = frame_dir / "meta.json"
+            if meta_file.is_file():
+                self.send_json_response(HTTPStatus.OK, {
+                    "state": "exists",
+                    "session_id": session_id,
+                    "frame_index": frame_index,
+                    "frame_dir": frame_dir_rel,
+                })
+                return
+
+            frame_dir.mkdir(parents=True, exist_ok=True)
+            tmp_jpg = frame_dir / ".source.jpg.tmp"
+            tmp_meta = frame_dir / ".meta.json.tmp"
+            try:
+                tmp_jpg.write_bytes(image_bytes)
+                tmp_meta.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+                os.replace(tmp_jpg, frame_dir / "source.jpg")
+                os.replace(tmp_meta, meta_file)
+            except OSError as exc:
+                tmp_jpg.unlink(missing_ok=True)
+                tmp_meta.unlink(missing_ok=True)
+                LOG.exception("Failed saving live frame %s: %s", frame_dir_rel, exc)
+                self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed writing live frame: {exc}")
+                return
+
+            try:
+                enqueue_live_job(root, session_id, frame_index, frame_dir_rel)
+            except Exception as exc:
+                LOG.warning("Failed enqueueing live job %s to Redis: %s", frame_dir_rel, exc)
+
+        self.send_json_response(HTTPStatus.CREATED, {
+            "state": "queued",
+            "session_id": session_id,
+            "frame_index": frame_index,
+            "frame_dir": frame_dir_rel,
+        })
 
     def do_PUT(self):
         parsed = urlparse(self.path)

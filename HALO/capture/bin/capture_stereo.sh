@@ -19,6 +19,17 @@ THERMAL_ENABLED="${THERMAL_ENABLED:-false}"
 [[ "$THERMAL_ENABLED" == true || "$THERMAL_ENABLED" == false ]] || die "THERMAL_ENABLED muss true oder false sein."
 LIGHT_ENABLED="${LIGHT_ENABLED:-false}"
 [[ "$LIGHT_ENABLED" == true || "$LIGHT_ENABLED" == false ]] || die "LIGHT_ENABLED muss true oder false sein."
+LIVE_SEGMENTATION_ENABLED="${LIVE_SEGMENTATION_ENABLED:-false}"
+[[ "$LIVE_SEGMENTATION_ENABLED" == true || "$LIVE_SEGMENTATION_ENABLED" == false ]] || die "LIVE_SEGMENTATION_ENABLED muss true oder false sein."
+LIVE_FRAME_INTERVAL_SECONDS="${LIVE_FRAME_INTERVAL_SECONDS:-3.5}"
+LIVE_JPEG_QUALITY="${LIVE_JPEG_QUALITY:-4}"
+IMAGE_ROTATION="${IMAGE_ROTATION:-180}"
+if [[ "$LIVE_SEGMENTATION_ENABLED" == true ]]; then
+  require_command ffmpeg
+  require_command python3
+  require_positive_number LIVE_FRAME_INTERVAL_SECONDS
+  require_uint LIVE_JPEG_QUALITY
+fi
 THERMAL_DEVICE="${THERMAL_DEVICE:-/dev/v4l/by-id/usb-Generic_USB_Camera_200901010001-video-index0}"
 if [[ "$IMU_ENABLED" == true ]]; then
   require_command python3
@@ -52,9 +63,11 @@ right_pid=''
 imu_pid=''
 thermal_pid=''
 light_pid=''
+live_extract_pid=''
 cleanup() {
   local code=$?
   trap - EXIT INT TERM
+  [[ -n "$live_extract_pid" ]] && kill "$live_extract_pid" 2>/dev/null || true
   [[ -n "$left_pid" ]] && kill "$left_pid" 2>/dev/null || true
   [[ -n "$right_pid" ]] && kill "$right_pid" 2>/dev/null || true
   [[ -n "$imu_pid" ]] && kill "$imu_pid" 2>/dev/null || true
@@ -170,6 +183,19 @@ kill -0 "$right_pid" 2>/dev/null || die "Rechte Sync-Client-Kamera endete vor Se
 capture_one left "$LEFT_CAMERA_INDEX" server "$partial_dir/video/left.mkv" "$partial_dir/logs/left.log" "${LEFT_CAMERA_ARGV[@]}" &
 left_pid=$!
 
+if [[ "$LIVE_SEGMENTATION_ENABLED" == true ]]; then
+  python3 "$SCRIPT_DIR/live_extract.py" \
+    --video "$partial_dir/video/left.mkv" \
+    --outbox "$DATA_ROOT/live_outbox/$session_id" \
+    --session-id "$session_id" \
+    --start-utc-ns "$started_at_utc_ns" \
+    --interval "$LIVE_FRAME_INTERVAL_SECONDS" \
+    --rotation "$IMAGE_ROTATION" \
+    --quality "$LIVE_JPEG_QUALITY" \
+    2>"$partial_dir/logs/live_extract.log" &
+  live_extract_pid=$!
+fi
+
 left_status=0
 right_status=0
 stop_requested=false
@@ -188,6 +214,11 @@ wait "$left_pid" || left_status=$?
 wait "$right_pid" || right_status=$?
 left_pid=''
 right_pid=''
+if [[ -n "$live_extract_pid" ]]; then
+  kill -TERM "$live_extract_pid" 2>/dev/null || true
+  wait "$live_extract_pid" 2>/dev/null || true
+  live_extract_pid=''
+fi
 
 if [[ "$stop_requested" == false ]]; then
   (( left_status == 0 )) || die "Linke Aufnahme fehlgeschlagen (Status $left_status); siehe logs/left.log."

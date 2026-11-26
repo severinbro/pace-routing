@@ -9,6 +9,7 @@ import http.client
 import io
 import json
 import logging
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -16,7 +17,9 @@ import socket
 import ssl
 import tarfile
 import tempfile
+import threading
 import time
+import uuid
 
 
 LOG = logging.getLogger("halo_upload")
@@ -244,6 +247,309 @@ def process_session(session_dir: Path, data_root: Path, include_video: bool = Fa
     LOG.info("Transfer committed for %s (%s)", session_dir.name, digest)
 
 
+LIVE_IMU_TOLERANCE_NS = 250_000_000  # +/- 250 ms
+LIVE_FRAME_RE = re.compile(r"frame_([0-9]{6})\.meta\.json\Z")
+
+
+def _matmul3(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
+    return [
+        [sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)]
+        for i in range(3)
+    ]
+
+
+def _quat_to_rotmat(qx: float, qy: float, qz: float, qw: float) -> list[list[float]]:
+    norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if norm == 0.0:
+        return [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+    x, y, z, w = qx / norm, qy / norm, qz / norm, qw / norm
+    return [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ]
+
+
+def _rotmat_to_euler_deg(r: list[list[float]]) -> tuple[float, float, float]:
+    """Return (pitch_deg, roll_deg, yaw_deg) from a 3x3 rotation matrix."""
+    sy = max(-1.0, min(1.0, -r[2][0]))
+    pitch = math.degrees(math.asin(sy))
+    roll = math.degrees(math.atan2(r[2][1], r[2][2]))
+    yaw = math.degrees(math.atan2(r[1][0], r[0][0]))
+    return round(pitch, 3), round(roll, 3), round(yaw, 3)
+
+
+def load_r_left_from_imu(calibration_path: Path | None) -> list[list[float]] | None:
+    """Parse imu_bno085.R_left_from_imu (3x3) from calibration_v5.yaml without PyYAML."""
+    if calibration_path is None or not calibration_path.is_file():
+        return None
+    try:
+        text = calibration_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = re.search(
+        r"R_left_from_imu\s*:\s*(\[\s*\[.*?\]\s*\])",
+        text,
+        flags=re.DOTALL,
+    )
+    if not match:
+        return None
+    try:
+        matrix = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    if (
+        isinstance(matrix, list)
+        and len(matrix) == 3
+        and all(isinstance(row, list) and len(row) == 3 for row in matrix)
+    ):
+        try:
+            return [[float(v) for v in row] for row in matrix]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _find_session_imu_csv(data_root: Path, session_id: str) -> Path | None:
+    sessions_dir = data_root / "sessions"
+    for candidate in (
+        sessions_dir / f".{session_id}.partial" / "imu.csv",
+        sessions_dir / session_id / "imu.csv",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def lookup_imu_orientation(
+    data_root: Path,
+    session_id: str,
+    capture_utc_ns: int,
+    r_left_from_imu: list[list[float]] | None,
+    image_rotation: int = 180,
+) -> tuple[int | None, float | None, float | None, float | None, bool]:
+    """Match nearest BNO085 quaternion within +/-250 ms and rotate into camera frame."""
+    imu_csv = _find_session_imu_csv(data_root, session_id)
+    if imu_csv is None:
+        return None, None, None, None, bool(r_left_from_imu is not None)
+
+    best_delta = LIVE_IMU_TOLERANCE_NS + 1
+    best_row: tuple[int, float, float, float, float] | None = None
+    try:
+        with imu_csv.open("r", encoding="utf-8", newline="") as stream:
+            reader = csv.DictReader(stream)
+            for row in reader:
+                try:
+                    utc_ns = int(row.get("utc_ns") or "")
+                    qi = float(row.get("quat_i") or "")
+                    qj = float(row.get("quat_j") or "")
+                    qk = float(row.get("quat_k") or "")
+                    qr = float(row.get("quat_real") or "")
+                except (TypeError, ValueError):
+                    continue
+                delta = abs(utc_ns - capture_utc_ns)
+                if delta <= LIVE_IMU_TOLERANCE_NS and delta < best_delta:
+                    best_delta = delta
+                    best_row = (utc_ns, qi, qj, qk, qr)
+    except OSError:
+        return None, None, None, None, bool(r_left_from_imu is not None)
+
+    if best_row is None:
+        return None, None, None, None, bool(r_left_from_imu is not None)
+
+    imu_utc_ns, qi, qj, qk, qr = best_row
+    rot = _quat_to_rotmat(qi, qj, qk, qr)
+    calibrated = r_left_from_imu is not None
+    if calibrated:
+        rot = _matmul3(r_left_from_imu, rot)
+    if image_rotation == 180:
+        rot_180 = [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]]
+        rot = _matmul3(rot_180, rot)
+    pitch_deg, roll_deg, yaw_deg = _rotmat_to_euler_deg(rot)
+    return imu_utc_ns, pitch_deg, roll_deg, yaw_deg, calibrated
+
+
+def list_live_outbox_frames(outbox_root: Path) -> list[tuple[int, Path, Path]]:
+    """Return all queued live (mtime_ns, meta_path, jpg_path) sorted FIFO."""
+    if not outbox_root.is_dir():
+        return []
+    entries: list[tuple[int, str, int, Path, Path]] = []
+    for session_dir in sorted(outbox_root.iterdir()):
+        if not session_dir.is_dir():
+            continue
+        for meta_path in sorted(session_dir.glob("frame_*.meta.json")):
+            match = LIVE_FRAME_RE.fullmatch(meta_path.name)
+            if not match:
+                continue
+            frame_idx = int(match.group(1))
+            jpg_path = session_dir / f"frame_{frame_idx:06d}.jpg"
+            if not jpg_path.is_file():
+                meta_path.unlink(missing_ok=True)
+                continue
+            try:
+                mtime_ns = meta_path.stat().st_mtime_ns
+            except OSError:
+                continue
+            entries.append((mtime_ns, session_dir.name, frame_idx, meta_path, jpg_path))
+    entries.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [(e[0], e[3], e[4]) for e in entries]
+
+
+def enforce_live_outbox_cap(outbox_root: Path, max_frames: int) -> int:
+    """Enforce global FIFO cap across live_outbox by evicting oldest unsent frames."""
+    if max_frames < 1:
+        return 0
+    frames = list_live_outbox_frames(outbox_root)
+    overflow = len(frames) - max_frames
+    if overflow <= 0:
+        return 0
+    evicted = 0
+    for _, meta_path, jpg_path in frames[:overflow]:
+        jpg_path.unlink(missing_ok=True)
+        meta_path.unlink(missing_ok=True)
+        evicted += 1
+    return evicted
+
+
+def build_multipart_frame(jpeg_bytes: bytes, meta: dict) -> tuple[bytes, str]:
+    boundary = f"----HaloLiveFrame{uuid.uuid4().hex}"
+    meta_bytes = json.dumps(meta).encode("utf-8")
+    parts = [
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="meta"; filename="meta.json"\r\n'
+        f"Content-Type: application/json\r\n\r\n".encode("utf-8"),
+        meta_bytes,
+        b"\r\n",
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="image"; filename="source.jpg"\r\n'
+        f"Content-Type: image/jpeg\r\n\r\n".encode("utf-8"),
+        jpeg_bytes,
+        b"\r\n",
+        f"--{boundary}--\r\n".encode("utf-8"),
+    ]
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def upload_live_frame(jpg_path: Path, meta: dict) -> int:
+    connect_host = os.environ.get("SENSE_UPLOAD_HOST", "pace-sense.local").strip()
+    tls_name = os.environ.get("SENSE_TLS_NAME", "pace-sense.local").strip()
+    port = int(os.environ.get("SENSE_HTTPS_PORT", "443"))
+    ca_file = Path(os.environ.get("SENSE_CA_FILE", "/run/secrets/sense-ca.crt"))
+    token_file = Path(os.environ.get("SENSE_TOKEN_FILE", "/run/secrets/halo-upload-token"))
+    timeout = int(os.environ.get("LIVE_UPLOAD_TIMEOUT_SECONDS", "15"))
+    session_id = str(meta["session_id"])
+    if not SESSION_RE.fullmatch(session_id):
+        raise ValueError(f"Invalid live session ID: {session_id}")
+    token = token_file.read_text(encoding="utf-8").strip()
+    if not token:
+        raise ValueError(f"Upload token is empty: {token_file}")
+    body, content_type = build_multipart_frame(jpg_path.read_bytes(), meta)
+    context = ssl.create_default_context(cafile=str(ca_file))
+    connection = VerifiedTLSConnection(connect_host, tls_name, port, context, timeout)
+    path = f"/halo-upload/v2/sessions/{session_id}/frames"
+    host_header = tls_name if port == 443 else f"{tls_name}:{port}"
+    headers = {
+        "Host": host_header,
+        "Authorization": f"Bearer {token}",
+        "X-HALO-Session-ID": session_id,
+        "Content-Type": content_type,
+        "Content-Length": str(len(body)),
+        "Connection": "close",
+    }
+    try:
+        connection.request("POST", path, body=body, headers=headers)
+        response = connection.getresponse()
+        resp_body = response.read(16 * 1024)
+        if response.status not in (200, 201):
+            raise UploadError(
+                f"SENSE live upload HTTP {response.status}: {resp_body[:500].decode('utf-8', 'replace')}"
+            )
+        return response.status
+    except (OSError, ssl.SSLError, http.client.HTTPException, socket.timeout) as exc:
+        raise UploadError(f"Could not reach SENSE live receiver: {exc}") from exc
+    finally:
+        connection.close()
+
+
+def has_active_partial_session(data_root: Path) -> bool:
+    sessions_dir = data_root / "sessions"
+    if not sessions_dir.is_dir():
+        return False
+    return any(
+        entry.is_dir() and entry.name.startswith(".") and entry.name.endswith(".partial")
+        for entry in sessions_dir.iterdir()
+    )
+
+
+def process_live_outbox_once(
+    data_root: Path,
+    max_frames: int,
+    r_left_from_imu: list[list[float]] | None,
+    image_rotation: int,
+) -> bool:
+    """Process one FIFO frame from DATA_ROOT/live_outbox. Returns True if work was done."""
+    outbox_root = data_root / "live_outbox"
+    evicted = enforce_live_outbox_cap(outbox_root, max_frames)
+    if evicted:
+        LOG.warning("Live outbox exceeded %d frames; evicted %d oldest frame(s)", max_frames, evicted)
+    frames = list_live_outbox_frames(outbox_root)
+    if not frames:
+        return False
+    _, meta_path, jpg_path = frames[0]
+    raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    session_id = str(raw_meta["session_id"])
+    frame_index = int(raw_meta["frame_index"])
+    capture_utc_ns = int(raw_meta["capture_utc_ns"])
+    imu_utc_ns, pitch_deg, roll_deg, yaw_deg, imu_calibrated = lookup_imu_orientation(
+        data_root, session_id, capture_utc_ns, r_left_from_imu, image_rotation=image_rotation
+    )
+    payload_meta = {
+        "session_id": session_id,
+        "frame_index": frame_index,
+        "capture_utc_ns": capture_utc_ns,
+        "imu_utc_ns": imu_utc_ns,
+        "pitch_deg": pitch_deg,
+        "roll_deg": roll_deg,
+        "yaw_deg": yaw_deg,
+        "imu_calibrated": imu_calibrated,
+    }
+    status = upload_live_frame(jpg_path, payload_meta)
+    jpg_path.unlink(missing_ok=True)
+    meta_path.unlink(missing_ok=True)
+    try:
+        if not any(meta_path.parent.iterdir()):
+            meta_path.parent.rmdir()
+    except OSError:
+        pass
+    LOG.info("Live frame uploaded (%d): %s frame_%06d", status, session_id, frame_index)
+    return True
+
+
+def live_upload_loop(data_root: Path, stop_event: threading.Event) -> None:
+    max_frames = int(os.environ.get("LIVE_OUTBOX_MAX_FRAMES", "120"))
+    image_rotation = int(os.environ.get("IMAGE_ROTATION", "180"))
+    calib_env = os.environ.get("HALO_CALIBRATION_FILE", "/etc/halo-camera/config/calibration_v5.yaml").strip()
+    r_left_from_imu = load_r_left_from_imu(Path(calib_env) if calib_env else None)
+    LOG.info(
+        "Live upload thread started (max_frames=%d, imu_calibrated=%s)",
+        max_frames,
+        r_left_from_imu is not None,
+    )
+    backoff = 1.0
+    while not stop_event.is_set():
+        try:
+            did_work = process_live_outbox_once(
+                data_root, max_frames, r_left_from_imu, image_rotation
+            )
+            backoff = 1.0
+            if not did_work:
+                stop_event.wait(0.5)
+        except Exception as exc:
+            LOG.warning("Live frame upload failed (retry in %.1fs): %s", backoff, exc)
+            stop_event.wait(backoff)
+            backoff = min(30.0, backoff * 2.0)
+
+
 def worker(data_root: Path, scan_seconds: int, include_video: bool) -> int:
     if scan_seconds < 1:
         raise ValueError("Upload scan interval must be at least one second")
@@ -251,19 +557,35 @@ def worker(data_root: Path, scan_seconds: int, include_video: bool) -> int:
              os.environ.get("SENSE_UPLOAD_HOST", "pace-sense.local"),
              os.environ.get("SENSE_TLS_NAME", "pace-sense.local"),
              os.environ.get("SENSE_HTTPS_PORT", "443"))
-    while True:
-        sessions_dir = data_root / "sessions"
-        for session_dir in sorted(sessions_dir.iterdir()) if sessions_dir.is_dir() else []:
-            if not session_dir.is_dir() or not (session_dir / ".transfer_pending").is_file():
+    stop_event = threading.Event()
+    if os.environ.get("LIVE_SEGMENTATION_ENABLED", "false").lower() == "true":
+        threading.Thread(
+            target=live_upload_loop,
+            args=(data_root, stop_event),
+            name="halo-live-uploader",
+            daemon=True,
+        ).start()
+    try:
+        while True:
+            if has_active_partial_session(data_root):
+                time.sleep(min(scan_seconds, 2))
                 continue
-            if not (session_dir / ".extraction_complete").is_file():
-                continue
-            try:
-                process_session(session_dir, data_root, include_video=include_video)
-            except Exception as exc:  # keep durable pending marker and retry on the next scan
-                LOG.error("Transfer attempt for %s failed; will retry: %s", session_dir.name, exc)
-                time.sleep(min(scan_seconds, 30))
-        time.sleep(scan_seconds)
+            sessions_dir = data_root / "sessions"
+            for session_dir in sorted(sessions_dir.iterdir()) if sessions_dir.is_dir() else []:
+                if has_active_partial_session(data_root):
+                    break
+                if not session_dir.is_dir() or not (session_dir / ".transfer_pending").is_file():
+                    continue
+                if not (session_dir / ".extraction_complete").is_file():
+                    continue
+                try:
+                    process_session(session_dir, data_root, include_video=include_video)
+                except Exception as exc:  # keep durable pending marker and retry on the next scan
+                    LOG.error("Transfer attempt for %s failed; will retry: %s", session_dir.name, exc)
+                    time.sleep(min(scan_seconds, 30))
+            time.sleep(scan_seconds)
+    finally:
+        stop_event.set()
 
 
 def request_session(data_root: Path, session_id: str) -> int:
