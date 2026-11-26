@@ -59,7 +59,7 @@ class PlatformNavigationTests(TestCase):
                 artifact = self.client.get(reverse('halo_export_artifact', args=[sid, 'pairs.csv']))
                 self.assertEqual(artifact.status_code, 200)
                 artifact_bytes = b''.join(artifact.streaming_content)
-                artifact.close()
+                artifact.file_to_stream.close()
                 self.assertIn(b'pair_index', artifact_bytes)
                 bad_artifact = self.client.get(reverse('halo_export_artifact', args=[sid, 'secret.txt']))
                 self.assertEqual(bad_artifact.status_code, 400)
@@ -68,7 +68,7 @@ class PlatformNavigationTests(TestCase):
                 zip_resp = self.client.get(reverse('halo_export_zip', args=[sid]))
                 self.assertEqual(zip_resp.status_code, 200)
                 zip_bytes = b''.join(zip_resp.streaming_content)
-                zip_resp.close()
+                zip_resp.file_to_stream.close()
                 with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
                     names = zf.namelist()
                     self.assertIn(f'{sid}/pairs.csv', names)
