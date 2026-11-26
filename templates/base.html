@@ -25,7 +25,6 @@
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' %}active{% endif %}" href="{% url 'halo_home' %}">
                     <i class="bi bi-camera-video"></i> <span>HALO</span>
                 </a>
-                <a class="nav-item nav-link" href="{% url 'admin_home' %}" title="PACE home"><i class="bi bi-house-fill"></i></a>
             {% endif %}
 
             <a class="nav-item nav-link {% if request.resolver_match.url_name == 'about' %}active{% endif %}" href="{% url 'about' %}">

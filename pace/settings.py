@@ -169,5 +169,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # https://docs.djangoproject.com/en/5.2/topics/auth/default/
 
 LOGIN_URL = 'admin_login'
-LOGIN_REDIRECT_URL = 'admin_home'
+LOGIN_REDIRECT_URL = 'about'
 LOGOUT_REDIRECT_URL = 'surveys_tab'

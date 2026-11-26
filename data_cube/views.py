@@ -83,9 +83,6 @@ class RoleLoginView(LoginView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        user = self.request.user
-        if user.is_staff:
-            return reverse('admin_home')
         return reverse('about')
 
 
@@ -322,11 +319,11 @@ def export_amenities_csv(request):
             os.remove(path)
         raise
 
-# --- ADMIN-ONLY: LANDING PAGE AFTER SIGN IN ---
+# --- ADMIN-ONLY: LEGACY LANDING REDIRECT ---
 @staff_member_required(login_url='admin_login')
 def admin_home(request):
-    """Choose between the SENSE and HALO parts of PACE."""
-    return render(request, 'data_cube/admin_home.html')
+    """Redirect legacy /admin-home/ URL to the project info page."""
+    return redirect('about')
 
 
 @staff_member_required(login_url='admin_login')
@@ -500,7 +497,7 @@ def create_user(request):
             user = form.save(commit=False)
             user.is_staff = False  # Non-admin: no dashboard/map/data access
             user.save()
-            return redirect('admin_home')
+            return redirect('sense_home')
     else:
         form = UserCreationForm()
     return render(request, 'data_cube/create_user.html', {'form': form})

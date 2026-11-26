@@ -13,8 +13,10 @@ class PlatformNavigationTests(TestCase):
 
     def test_staff_can_open_both_sections(self):
         self.client.force_login(self.staff)
-        self.assertContains(self.client.get(reverse('admin_home')), 'SENSE')
-        self.assertContains(self.client.get(reverse('admin_home')), 'HALO')
+        self.assertRedirects(self.client.get(reverse('admin_home')), reverse('about'))
+        about_resp = self.client.get(reverse('about'))
+        self.assertContains(about_resp, 'SENSE')
+        self.assertContains(about_resp, 'HALO')
         self.assertContains(self.client.get(reverse('sense_home')), 'sensor worker')
         self.assertContains(self.client.get(reverse('halo_home')), 'Recording control')
 
@@ -39,7 +41,7 @@ class PlatformNavigationTests(TestCase):
     def test_poweroff_actions_require_post_csrf_and_staff(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.staff)
-        client.get(reverse('admin_home'))
+        client.get(reverse('sense_home'))
         token = client.cookies['csrftoken'].value
         self.assertEqual(client.get(reverse('halo_poweroff')).status_code, 405)
         self.assertEqual(client.get(reverse('campaign_poweroff')).status_code, 405)
