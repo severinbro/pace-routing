@@ -64,3 +64,10 @@ def halo_start(request):
 def halo_stop(request):
     code, payload = control_request('recordings/stop', 'POST')
     return JsonResponse(payload, status=code)
+
+
+@staff_member_required(login_url='admin_login')
+@require_POST
+def halo_poweroff(request):
+    code, payload = control_request('poweroff', 'POST')
+    return JsonResponse(payload, status=code)

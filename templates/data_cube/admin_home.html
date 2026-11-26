@@ -21,5 +21,38 @@
             </a>
         </div>
     </div>
+    <div class="pace-card p-4 mt-4 mx-auto" style="max-width: 1000px;">
+        <h2 class="pace-section-title"><span class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-power"></i></span> System Power</h2>
+        <p class="text-muted mb-3">Gracefully shut down the Raspberry Pis before disconnecting power. Shut down <strong>HALO first</strong>, since SENSE provides the PACE Wi-Fi and this dashboard.</p>
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" id="poweroff-halo-btn" class="btn btn-outline-danger"><i class="bi bi-power"></i> Power off HALO</button>
+            <button type="button" id="poweroff-sense-btn" class="btn btn-danger"><i class="bi bi-power"></i> Power off SENSE</button>
+        </div>
+        <div id="power-message" class="mt-3 fw-bold" role="status"></div>
+    </div>
 </div>
+<script>
+(function(){
+  const csrf = document.getElementById('csrf-token').value;
+  const msg = document.getElementById('power-message');
+  async function triggerPoweroff(label, url, warnText) {
+    if (!confirm('Shut down ' + label + '?\n\n' + warnText)) return;
+    if (!confirm('Final confirmation: Power off ' + label + ' now?')) return;
+    msg.className = 'mt-3 fw-bold text-warning';
+    msg.textContent = 'Requesting graceful shutdown of ' + label + '…';
+    try {
+      const response = await fetch(url, {method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': csrf}});
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Poweroff request failed');
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = label + ' is shutting down gracefully. Wait ~15 seconds before disconnecting power.';
+    } catch (err) {
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = label + ' poweroff error: ' + err.message;
+    }
+  }
+  document.getElementById('poweroff-halo-btn').onclick = () => triggerPoweroff('HALO', '{% url "halo_poweroff" %}', 'Make sure no recording or upload is in progress.');
+  document.getElementById('poweroff-sense-btn').onclick = () => triggerPoweroff('SENSE', '{% url "campaign_poweroff" %}', 'This will also disconnect the PACE Wi-Fi and dashboard. Shut down HALO first if it is running.');
+})();
+</script>
 {% endblock %}

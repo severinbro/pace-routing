@@ -420,28 +420,75 @@ def campaign_status(request):
     """Returns the current campaign state as JSON (for AJAX polling)."""
     return JsonResponse(campaign_state())
 
+def _dbus_poweroff_now():
+    """Invoke systemd-logind PowerOff over the mounted host system D-Bus."""
+    import subprocess
+    subprocess.run(
+        [
+            'dbus-send', '--system', '--print-reply',
+            '--dest=org.freedesktop.login1',
+            '/org/freedesktop/login1',
+            'org.freedesktop.login1.Manager.PowerOff',
+            'boolean:false',
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+def _schedule_host_poweroff():
+    """Schedule a graceful SENSE host shutdown via host D-Bus, falling back to sysrq."""
+    import os
+    import shutil
+    import subprocess
+    import threading
+
+    dbus_socket = '/run/dbus/system_bus_socket'
+    if os.path.exists(dbus_socket) and shutil.which('dbus-send'):
+        probe = subprocess.run(
+            [
+                'dbus-send', '--system', '--print-reply',
+                '--dest=org.freedesktop.login1',
+                '/org/freedesktop/login1',
+                'org.freedesktop.login1.Manager.CanPowerOff',
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if probe.returncode != 0 or '"yes"' not in probe.stdout:
+            detail = (probe.stderr or probe.stdout).strip()[:160]
+            raise OSError(detail or 'Host D-Bus rejected PowerOff check')
+        timer = threading.Timer(2.0, _dbus_poweroff_now)
+        timer.daemon = True
+        timer.start()
+        return {'shutting_down': True, 'method': 'systemd-logind', 'delay_seconds': 2}
+
+    with open('/proc/sysrq-trigger', 'w') as trigger:
+        trigger.write('o')
+    return {'shutting_down': True, 'method': 'sysrq'}
+
+
 @staff_member_required(login_url='admin_login')
 def campaign_poweroff(request):
-    """Powers off the host machine (Raspberry Pi 5).
+    """Powers off the SENSE host machine (Raspberry Pi 5).
 
-    The web container runs in privileged mode, so writing 'o' (poweroff)
-    to /proc/sysrq-trigger is forwarded to the host kernel and immediately
-    powers down the device.  Intended for a controlled "Switch Off" from
-    the campaign hub after a double confirmation from the user.
+    Uses graceful systemd-logind PowerOff over the mounted host D-Bus socket
+    when available (SENSE Compose stack), and falls back to /proc/sysrq-trigger
+    for the legacy privileged standalone Compose stack.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
-    logger.warning('Poweroff requested by user %s — shutting down host.',
+    logger.warning('Poweroff requested by user %s — shutting down SENSE host.',
                    request.user.username)
     try:
-        with open('/proc/sysrq-trigger', 'w') as trigger:
-            trigger.write('o')
-    except OSError as exc:
+        payload = _schedule_host_poweroff()
+    except (OSError, subprocess.SubprocessError) as exc:
         logger.error('Poweroff failed: %s', exc)
         return JsonResponse({'error': 'Poweroff failed: ' + str(exc)}, status=500)
-    # The host powers off immediately, so this response may never arrive —
-    # the client shows a farewell message and the page simply goes blank.
-    return JsonResponse({'shutting_down': True})
+    return JsonResponse(payload)
 
 # --- ADMIN-ONLY: CREATE NON-ADMIN USER ---
 @staff_member_required(login_url='admin_login')

@@ -19,5 +19,33 @@
         <div class="col-md-6"><a class="pace-card pace-card-hover d-block p-4 h-100 text-decoration-none" href="{% url 'create_user' %}"><h2><i class="bi bi-person-plus-fill"></i> Participants</h2><p class="text-muted mb-0">Create survey accounts.</p></a></div>
         <div class="col-md-6"><a class="pace-card pace-card-hover d-block p-4 h-100 text-decoration-none" href="{% url 'surveys_tab' %}"><h2><i class="bi bi-clipboard-check"></i> Survey</h2><p class="text-muted mb-0">Open the participant survey.</p></a></div>
     </div>
+    <div class="pace-card p-4 mt-4">
+        <h2 class="pace-section-title"><span class="pace-icon-tile pace-icon-tile-coral"><i class="bi bi-power"></i></span> SENSE Power</h2>
+        <p class="text-muted mb-3">Gracefully shut down the SENSE Raspberry Pi. This will disconnect the PACE Wi-Fi and web interface.</p>
+        <button type="button" id="sense-poweroff-btn" class="btn btn-outline-danger"><i class="bi bi-power"></i> Power off SENSE</button>
+        <div id="sense-power-message" class="mt-3 fw-bold" role="status"></div>
+    </div>
 </div>
+<script>
+(function(){
+  const csrf = document.getElementById('csrf-token').value;
+  const msg = document.getElementById('sense-power-message');
+  document.getElementById('sense-poweroff-btn').onclick = async () => {
+    if (!confirm('Shut down the SENSE Raspberry Pi?\n\nThis will also disconnect the PACE Wi-Fi and dashboard.')) return;
+    if (!confirm('Final confirmation: Power off SENSE now?')) return;
+    msg.className = 'mt-3 fw-bold text-warning';
+    msg.textContent = 'Requesting graceful shutdown of SENSE…';
+    try {
+      const response = await fetch('{% url "campaign_poweroff" %}', {method: 'POST', credentials: 'same-origin', headers: {'X-CSRFToken': csrf}});
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Poweroff request failed');
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = 'SENSE is shutting down gracefully. Wait ~15 seconds before disconnecting power.';
+    } catch (err) {
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = 'SENSE poweroff error: ' + err.message;
+    }
+  };
+})();
+</script>
 {% endblock %}

@@ -221,6 +221,17 @@ def cleanup(session_id, digest, manifest_hash):
     return {'cleaned': bool(video_entries) or had_images, 'session_id': session_id}
 
 
+def poweroff():
+    if active():
+        return {'error': 'Stop the active recording before shutting down HALO'}
+    proc = run('sudo', '-n', '/usr/bin/systemd-run', '--unit=halo-ui-poweroff',
+               '--on-active=2s', '/usr/bin/systemctl', 'poweroff')
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()[:160]
+        return {'error': detail or 'Failed to schedule HALO poweroff'}
+    return {'shutting_down': True, 'delay_seconds': 2}
+
+
 def main():
     # A forced SSH command passes one of these exact verbs; never evaluate a shell fragment.
     args = sys.argv[1:]
@@ -232,6 +243,8 @@ def main():
         result = start()
     elif args == ['stop']:
         result = stop()
+    elif args == ['poweroff']:
+        result = poweroff()
     elif len(args) == 4 and args[0] == 'cleanup':
         result = cleanup(args[1], args[2], args[3])
     else:

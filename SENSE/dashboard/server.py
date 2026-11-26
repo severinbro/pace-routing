@@ -237,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split('?', 1)[0]
-        if path in ('/internal/recordings/start', '/internal/recordings/stop'):
+        if path in ('/internal/recordings/start', '/internal/recordings/stop', '/internal/poweroff'):
             if not self.internal_authorized():
                 return
             verb = path.rsplit('/', 1)[-1]

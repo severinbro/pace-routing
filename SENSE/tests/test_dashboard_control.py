@@ -57,3 +57,16 @@ class DashboardControlTests(unittest.TestCase):
                 result = controller.start()
             self.assertEqual(result['error'], 'HALO is not ready')
             self.assertFalse((Path(tmp) / '.ui_stop').exists())
+
+    def test_poweroff_rejects_active_recording_and_schedules_when_idle(self):
+        with patch.object(controller, 'active', return_value=True):
+            result = controller.poweroff()
+        self.assertIn('error', result)
+        fake_proc = type('Proc', (), {'returncode': 0, 'stdout': '', 'stderr': ''})()
+        with patch.object(controller, 'active', return_value=False), patch.object(controller, 'run', return_value=fake_proc) as mock_run:
+            result = controller.poweroff()
+        self.assertEqual(result, {'shutting_down': True, 'delay_seconds': 2})
+        mock_run.assert_called_once_with(
+            'sudo', '-n', '/usr/bin/systemd-run', '--unit=halo-ui-poweroff',
+            '--on-active=2s', '/usr/bin/systemctl', 'poweroff'
+        )

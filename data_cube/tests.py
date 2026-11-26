@@ -36,6 +36,25 @@ class PlatformNavigationTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['error'], 'HALO is not ready')
 
+    def test_poweroff_actions_require_post_csrf_and_staff(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.staff)
+        client.get(reverse('admin_home'))
+        token = client.cookies['csrftoken'].value
+        self.assertEqual(client.get(reverse('halo_poweroff')).status_code, 405)
+        self.assertEqual(client.get(reverse('campaign_poweroff')).status_code, 405)
+        with patch('data_cube.halo_views.control_request', return_value=(200, {'shutting_down': True})) as mock_ctrl:
+            self.assertEqual(client.post(reverse('halo_poweroff')).status_code, 403)
+            response = client.post(reverse('halo_poweroff'), HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['shutting_down'])
+        mock_ctrl.assert_called_once_with('poweroff', 'POST')
+        with patch('data_cube.views._schedule_host_poweroff', return_value={'shutting_down': True, 'method': 'systemd-logind'}):
+            self.assertEqual(client.post(reverse('campaign_poweroff')).status_code, 403)
+            response = client.post(reverse('campaign_poweroff'), HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['shutting_down'])
+
     def test_old_login_limits_failed_attempts(self):
         from data_cube.views import r
         address = '198.51.100.42'

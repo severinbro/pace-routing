@@ -97,6 +97,7 @@ services:
       - ./config/pace.env
     volumes:
       - ./config/dashboard-internal.token:/config/dashboard-internal.token:ro
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     depends_on:
       pace-db:
         condition: service_healthy

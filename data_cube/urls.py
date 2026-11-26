@@ -38,6 +38,7 @@ urlpatterns = [
     path('halo/api/sessions/', halo_views.halo_sessions, name='halo_sessions'),
     path('halo/api/recordings/start/', halo_views.halo_start, name='halo_start'),
     path('halo/api/recordings/stop/', halo_views.halo_stop, name='halo_stop'),
+    path('halo/api/poweroff/', halo_views.halo_poweroff, name='halo_poweroff'),
     path('create-user/', views.create_user, name='create_user'),
     path('sign-up/', views.sign_up, name='sign_up'),
 

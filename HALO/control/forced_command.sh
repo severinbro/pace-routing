@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 read -r -a args <<< "${SSH_ORIGINAL_COMMAND:-}"
 case "${args[0]:-}" in
-  status|sessions|start|stop)
+  status|sessions|start|stop|poweroff)
     (( ${#args[@]} == 1 )) || exit 2 ;;
   cleanup)
     (( ${#args[@]} == 4 )) || exit 2
