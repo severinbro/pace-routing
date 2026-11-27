@@ -2,18 +2,19 @@
 {% load static %}
 
 {% block content %}
-<div class="container py-4">
+<div class="container-fluid px-2 px-md-4 py-3">
     <div class="text-center mb-4">
-        <div class="pace-icon-tile pace-icon-tile-navy mx-auto mb-3">
-            <i class="bi bi-database-fill"></i>
+        <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3">
+            <i class="bi bi-cpu"></i>
         </div>
-        <h2 class="fw-bold">Data Browser</h2>
-        <p class="text-muted">Browse all collected sensor and survey data.</p>
-        <div class="d-flex justify-content-center gap-2 flex-wrap mt-2">
-            <a href="{% url 'sense_home' %}" class="btn btn-pace-outline btn-sm"><i class="bi bi-sliders"></i> SENSE Control</a>
-            <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-mint btn-sm"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+        <h1>SENSE</h1>
+        <p class="text-muted">Browse and export collected sensor and survey data.</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+            <a href="{% url 'data_browser' %}" class="btn btn-pace-sky" aria-current="page"><i class="bi bi-database"></i> Data &amp; Export</a>
         </div>
     </div>
+    <div class="container px-0">
 
     <!-- Exports -->
     <div class="pace-card p-4 mb-4">
@@ -142,6 +143,7 @@
         <p class="text-muted small mt-2">Showing latest 200 records.</p>
     </div>
     {% endfor %}
+    </div>
 </div>
 
 <script>

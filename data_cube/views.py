@@ -96,7 +96,9 @@ def map_tab(request):
 @staff_member_required(login_url='admin_login')
 def dashboard_tab(request):
     """Renders the live sensor telemetry grid."""
-    return render(request, 'data_cube/dashboard.html')
+    return render(request, 'data_cube/dashboard.html', {
+        'hardware_available': settings.SENSE_HARDWARE_AVAILABLE,
+    })
 
 @staff_member_required(login_url='admin_login')
 def toggle_collect_mode(request):
@@ -328,9 +330,8 @@ def admin_home(request):
 
 @staff_member_required(login_url='admin_login')
 def sense_home(request):
-    return render(request, 'data_cube/sense_home.html', {
-        'hardware_available': settings.SENSE_HARDWARE_AVAILABLE,
-    })
+    """Redirect /sense/ directly to the SENSE Sensor Dashboard."""
+    return redirect('dashboard_tab')
 
 # --- ADMIN-ONLY: CAMPAIGN HUB ---
 @staff_member_required(login_url='admin_login')

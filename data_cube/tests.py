@@ -25,14 +25,20 @@ class PlatformNavigationTests(TestCase):
         self.assertContains(about_resp, 'id="theme-toggle"')
         self.assertContains(about_resp, reverse('campaign_hub'))
         self.assertContains(about_resp, reverse('map_tab'))
-        sense_resp = self.client.get(reverse('sense_home'))
+        self.assertRedirects(self.client.get(reverse('sense_home')), reverse('dashboard_tab'))
+        sense_resp = self.client.get(reverse('dashboard_tab'))
         self.assertContains(sense_resp, 'sensor worker')
         self.assertContains(sense_resp, reverse('dashboard_tab'))
         self.assertContains(sense_resp, reverse('data_browser'))
         self.assertNotContains(sense_resp, reverse('create_user'))
         self.assertNotContains(sense_resp, 'href="/"')
-        self.assertContains(self.client.get(reverse('halo_home')), 'Recording control')
-        self.assertContains(self.client.get(reverse('halo_dashboard')), 'HALO Sensor Dashboard')
+        halo_resp = self.client.get(reverse('halo_home'))
+        self.assertContains(halo_resp, 'Recording control')
+        self.assertContains(halo_resp, 'HALO Controller')
+        halo_dash = self.client.get(reverse('halo_dashboard'))
+        self.assertContains(halo_dash, 'HALO Controller')
+        self.assertContains(halo_dash, 'Sensor Dashboard')
+        self.assertContains(halo_dash, 'Data &amp; Export')
         self.assertContains(self.client.get(reverse('campaign_hub')), reverse('create_user'))
 
     def test_participant_cannot_open_halo(self):
@@ -93,7 +99,7 @@ class PlatformNavigationTests(TestCase):
     def test_poweroff_actions_require_post_csrf_and_staff(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.staff)
-        client.get(reverse('sense_home'))
+        client.get(reverse('campaign_hub'))
         token = client.cookies['csrftoken'].value
         self.assertEqual(client.get(reverse('halo_poweroff')).status_code, 405)
         self.assertEqual(client.get(reverse('campaign_poweroff')).status_code, 405)

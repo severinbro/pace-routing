@@ -32,10 +32,10 @@ Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
 copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account (redirects
 to the project Info page at `/about/`). Staff navigation provides dedicated sections
-for **SENSE** (`/sense/`, live Sensor Dashboard `/dashboard/`, Data & Export `/data-browser/`,
-collection & graceful poweroff), **HALO** (`/halo/`, live Sensor Dashboard `/halo/dashboard/`,
-Data & Export `/halo/data/`, recording & graceful poweroff), **Campaigns & Participants**
-(`/campaign/`), and **Map** (`/map/`), along with a top-right light/dark theme toggle.
+for **SENSE** (live Sensor Dashboard `/dashboard/` and Data & Export `/data-browser/`),
+**HALO** (HALO Controller `/halo/`, live Sensor Dashboard `/halo/dashboard/`, and
+Data & Export `/halo/data/`), **Campaigns & Participants**
+(`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`), along with a top-right light/dark theme toggle.
 HALO uses its locally installed image and can [record and extract locally](HALO/README.md#test-a-capture-without-sense)
 while SENSE is offline.
 

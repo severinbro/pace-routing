@@ -4,15 +4,15 @@
 {% block content %}
 <script src="{% static 'js/chart.umd.js' %}"></script>
 
-<div class="container-fluid p-0">
-    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-        <div>
-            <h2 class="fw-bold mb-0"><i class="bi bi-camera-video"></i> HALO Sensor Dashboard</h2>
-            <small class="text-muted" id="halo-telemetry-source">Polling HALO telemetry…</small>
-        </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{% url 'halo_home' %}" class="btn btn-pace-outline btn-sm"><i class="bi bi-sliders"></i> HALO Control</a>
-            <a href="{% url 'halo_data' %}" class="btn btn-pace-sky btn-sm"><i class="bi bi-database"></i> Data &amp; Export</a>
+<div class="container-fluid px-2 px-md-4 py-3">
+    <div class="text-center mb-4">
+        <div class="pace-icon-tile pace-icon-tile-coral mx-auto mb-3"><i class="bi bi-camera-video"></i></div>
+        <h1>HALO</h1>
+        <p class="text-muted mb-1" id="halo-telemetry-source">Polling HALO telemetry…</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <a href="{% url 'halo_home' %}" class="btn btn-pace-outline"><i class="bi bi-sliders"></i> HALO Controller</a>
+            <a href="{% url 'halo_dashboard' %}" class="btn btn-pace-mint" aria-current="page"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+            <a href="{% url 'halo_data' %}" class="btn btn-pace-outline"><i class="bi bi-database"></i> Data &amp; Export</a>
         </div>
     </div>
 

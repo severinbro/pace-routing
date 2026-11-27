@@ -3,8 +3,9 @@
 <div class="container-fluid px-2 px-md-4 py-3">
   <div class="text-center mb-4"><div class="pace-icon-tile pace-icon-tile-coral mx-auto mb-3"><i class="bi bi-camera-video"></i></div><h1>HALO</h1><p class="text-muted">Record on HALO and monitor synchronization and transfer to SENSE.</p>
     <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
-      <a href="{% url 'halo_dashboard' %}" class="btn btn-pace-mint"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
-      <a href="{% url 'halo_data' %}" class="btn btn-pace-sky"><i class="bi bi-database"></i> Data &amp; Export</a>
+      <a href="{% url 'halo_home' %}" class="btn btn-pace-primary" aria-current="page"><i class="bi bi-sliders"></i> HALO Controller</a>
+      <a href="{% url 'halo_dashboard' %}" class="btn btn-pace-outline"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+      <a href="{% url 'halo_data' %}" class="btn btn-pace-outline"><i class="bi bi-database"></i> Data &amp; Export</a>
     </div>
   </div>
   <div class="row g-3 mb-3">
