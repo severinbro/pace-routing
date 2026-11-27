@@ -36,7 +36,8 @@ for **SENSE** (SENSE Controller `/sense/` with recording control, saved sensor a
 live CPU/RAM/Storage/temperature metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
 **HALO** (HALO Controller `/halo/` with recording control, live CPU/RAM/Storage/temperature metrics &
 graceful poweroff, live Sensor Dashboard `/halo/dashboard/`, and Data & Export `/halo/data/`),
-**Campaigns & Participants** (`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`,
+**Segmentation** (`/segmentation/`, with committed frame metrics, source and overlay previews,
+and CSV and frame downloads), **Campaigns & Participants** (`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`,
 accessible to both staff and participants — showing campaign stops, status, and live position,
 with admin route-stop placement, backed by a lightweight offline MBTiles SQLite archive at
 `SENSE/data/maps/offline.mbtiles` served directly via `/tiles/{z}/{x}/{y}.png` — generate with
@@ -158,6 +159,7 @@ Only admin (`is_staff`) accounts may push GNSS fixes, so participant phones neve
 | `/admin-home/`, `/create-user/` | Staff | Compatibility redirect to `/about/` and participant account creation |
 | `/campaign/` and `/campaign/{start,abort,unlock-stop,toggle-collect,status,poweroff,stops}/` | Staff | Manage campaigns and route stops |
 | `/sense/`, `/dashboard/`, `/api/sense-system/`, `/api/latest-sensors/` | Staff | SENSE controls, saved readings and surveys, telemetry, and live sensor snapshot |
+| `/segmentation/`, `/segmentation/preview/`, `/segmentation/export/` | Staff | Committed segmentation results, source and overlay preview, and downloads |
 | `/api/update-gnss/`, `/api/toggle-collect-mode/` | Staff POST | Receive phone GNSS fixes and manage sensor collection |
 | `/data-browser/`, `/export-{csv,survey-json,weather-csv,amenities-csv}/` | Staff | Export sensor and survey data |
 | `/halo/`, `/halo/dashboard/`, `/halo/data/` | Staff | HALO controls, telemetry, and session browser |

@@ -258,6 +258,10 @@ published.
 
 ## Transfer to SENSE
 
+Staff can inspect committed frame segmentation in the main **Segmentation**
+section of the SENSE web interface. The page reads results stored on SENSE and
+offers frame previews and exports.
+
 During capture, the uploader can send sampled JPEG previews and capture
 metadata over HTTPS via `POST /halo-upload/v2/sessions/<SESSION_ID>/frames`.
 The receiver authenticates with the shared Bearer token and limits each v2

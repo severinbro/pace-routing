@@ -41,6 +41,9 @@
                     <i class="bi bi-camera-video"></i> <span>HALO</span>
                 </a>
                 {% endif %}
+                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'segmentation_dashboard' or request.resolver_match.url_name == 'segmentation_tab' %}active{% endif %}" href="{% url 'segmentation_dashboard' %}" title="Segmentation" aria-label="Segmentation">
+                    <i class="bi bi-grid-3x3-gap"></i> <span>Segmentation</span>
+                </a>
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' or request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'campaign_hub' %}" title="Campaigns &amp; Participants">
                     <i class="bi bi-clipboard2-data-fill"></i>
                 </a>
@@ -130,7 +133,7 @@
 
     <!-- Smartphone GNSS Pusher: streams the admin phone's geolocation to the RPi5 -->
     <!-- Only runs for authenticated admin (is_staff) users so non-admin phones don't interfere -->
-    {% if request.user.is_authenticated and request.user.is_staff and request.resolver_match.url_name != 'halo_home' %}
+    {% if request.user.is_authenticated and request.user.is_staff and request.resolver_match.url_name != 'halo_home' and request.resolver_match.url_name != 'segmentation_dashboard' and request.resolver_match.url_name != 'segmentation_tab' %}
     <script>
     (function () {
         if (!navigator.geolocation) {

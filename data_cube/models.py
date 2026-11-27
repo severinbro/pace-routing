@@ -3,6 +3,45 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.contrib.auth.models import User
 
 
+class SegmentationFrame(models.Model):
+    """The first committed result for a HALO frame."""
+
+    session_id = models.CharField(max_length=128)
+    frame_index = models.PositiveIntegerField()
+    capture_utc_ns = models.PositiveBigIntegerField()
+    qualified_capture_utc_ns = models.PositiveBigIntegerField(null=True)
+    timing_quality = models.CharField(max_length=16)
+    committed_at = models.DateTimeField(auto_now_add=True)
+    inference_ms = models.FloatField(null=True)
+    source_sha256 = models.CharField(max_length=64)
+    mask_sha256 = models.CharField(max_length=64)
+    manifest_id = models.CharField(max_length=64)
+    result_sha256 = models.CharField(max_length=64)
+    hef_sha256 = models.CharField(max_length=64, null=True)
+    model_version = models.CharField(max_length=64)
+    source_image_path = models.CharField(max_length=512)
+    mask_image_path = models.CharField(max_length=512)
+    class_counts = models.JSONField(default=dict)
+    class_ratios_json = models.JSONField(default=dict)
+    valid_pixel_count = models.PositiveBigIntegerField()
+    void_pixel_count = models.PositiveBigIntegerField()
+    gvi = models.FloatField(null=True)
+    sky_ratio = models.FloatField(null=True)
+    bsi = models.FloatField(null=True)
+    sidewalk_ratio = models.FloatField(null=True)
+    obstacle_ratio = models.FloatField(null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session_id", "frame_index"], name="segmentation_unique_frame"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["session_id", "committed_at"], name="segmentation_session_time"),
+        ]
+
+
 ## ----- Sensor Tables -----
 
 # 1a. GNSS Data Table — Phone (sourced from the admin smartphone's browser)

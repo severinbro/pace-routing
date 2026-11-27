@@ -298,3 +298,43 @@ Check the Django app and HTTPS endpoint.
 docker compose exec -T pace-web python manage.py test data_cube.tests
 curl --cacert config/certs/server.crt https://10.42.10.1:18443/healthz
 ```
+## Isolated segmentation replay
+
+The test stack exercises HALO Protocol v2 through HTTPS, Redis and a single
+worker, then commits a result in Django/PostgreSQL and renders an overlay. It
+uses a fixed mask and requires no HEF or Hailo device. Run these commands from
+the repository root with Docker Compose and Bash.
+
+```sh
+bash SENSE/tests/run_segmentation_fixture.sh verify
+```
+
+The Compose project is `pace-seg-fixture`. It publishes no host ports and uses
+its own volumes and generated fixture credentials. The normal SENSE Compose
+stack continues to use its existing receiver configuration.
+
+To exercise a real archived HALO image, supply a directory outside Git with
+`source.jpg`, a matching class-ID `mask.png`, `manifest.json` and
+`expected.json`. The test compares exact class counts and selected overlay
+pixels. Use the synthetic case as an example of the expected counts and pixel
+assertions.
+
+```sh
+bash SENSE/tests/run_segmentation_fixture.sh replay /path/to/segmentation-replay
+```
+
+Open **Segmentation** in the dashboard's main navigation as staff. **Overview**
+shows the selected frame's model, timing, pixel counts, and class shares.
+**Preview** compares the retained source JPEG and overlay. **Export** downloads
+the session CSV and the selected frame's source, mask, overlay, and class
+manifest. Results from the fixture are labeled **Test mask**. Frame files can
+expire while saved metrics and the session CSV remain available. The standard
+SENSE deployment shows committed results from its own database. The isolated
+fixture uses a separate database and the standard deployment starts with an
+empty segmentation page until results are committed there.
+
+Remove the isolated stack and its test data when finished.
+
+```sh
+docker compose -p pace-seg-fixture -f SENSE/tests/compose.segmentation.yaml down -v
+```

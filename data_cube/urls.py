@@ -1,8 +1,10 @@
 from django.urls import path
+from django.conf import settings
 from django.contrib.auth import views as auth_views
 from django.views.generic import RedirectView
 from . import views
 from . import halo_views
+from . import segmentation_dashboard
 
 urlpatterns = [
     path('favicon.ico', RedirectView.as_view(url='/static/img/favicon.png', permanent=False)),
@@ -15,6 +17,10 @@ urlpatterns = [
     path('api/map-data/', views.api_map_data, name='api_map_data'),
     path('campaign/stops/', views.campaign_stops, name='campaign_stops'),
     path('dashboard/', views.dashboard_tab, name='dashboard_tab'),
+    path('segmentation/', segmentation_dashboard.dashboard, name='segmentation_dashboard'),
+    path('segmentation/export/<str:session>/csv/', segmentation_dashboard.export_csv, name='segmentation_export'),
+    path('segmentation/artifacts/<int:pk>/<str:name>/', segmentation_dashboard.artifact, name='segmentation_artifact'),
+    path('segmentation/<str:tab>/', segmentation_dashboard.dashboard, name='segmentation_tab'),
     path('api/toggle-collect-mode/', views.toggle_collect_mode, name='toggle_collect_mode'),
     path('data-browser/', views.data_browser, name='data_browser'),
     path('export-csv/', views.export_csv, name='export_csv'),
@@ -57,3 +63,10 @@ urlpatterns = [
     path('api/sense-system/', views.sense_system_status, name='sense_system_status'),
     path('api/update-gnss/', views.api_update_gnss, name='api_update_gnss'),
 ]
+
+if settings.SEGMENTATION_INTERNAL_ENABLED:
+    from .segmentation_views import commit_frame
+
+    urlpatterns.append(
+        path('internal/segmentation/frames/', commit_frame, name='segmentation_commit_frame')
+    )

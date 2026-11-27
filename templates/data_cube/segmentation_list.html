@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-3">
+    <header class="mb-4">
+        <h1 class="d-flex gap-2 align-items-center"><i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> Segmentation</h1>
+        <p class="text-muted mb-0">Inspect committed camera frame results on SENSE.</p>
+    </header>
+
+    <nav class="pace-tabs mb-3" aria-label="Segmentation pages">
+        {% for key, label in tabs.items %}
+        <a class="pace-tab text-decoration-none{% if tab == key %} active{% endif %}" href="{% url 'segmentation_tab' key %}{% querystring session=session frame=selected_index %}"{% if tab == key %} aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </nav>
+
+    {% if not sessions.paginator.count %}
+    <p class="pace-card p-4" role="status">No committed segmentation results yet. Results will appear here after SENSE processes a frame.</p>
+    {% else %}
+    <div class="row g-3">
+        <aside class="col-lg-4 col-xl-3">
+            <section class="pace-card p-3" aria-labelledby="seg-sessions">
+                <h2 id="seg-sessions" class="h5">Sessions <span class="text-muted">({{ sessions.paginator.count }})</span></h2>
+                <div class="list-group list-group-flush">
+                    {% for item in sessions %}
+                    <a class="list-group-item list-group-item-action text-break{% if item.session_id == session %} active{% endif %}" href="{% querystring session=item.session_id frame=None page=None %}"{% if item.session_id == session %} aria-current="true"{% endif %}>{{ item.session_id }}</a>
+                    {% endfor %}
+                </div>
+                {% if sessions.has_other_pages %}
+                <nav class="d-flex justify-content-between gap-2 mt-2" aria-label="Session pages">
+                    {% if sessions.has_previous %}<a href="{% querystring sessions=sessions.previous_page_number session=session %}">Previous</a>{% endif %}
+                    <span class="text-muted">{{ sessions.number }} of {{ sessions.paginator.num_pages }}</span>
+                    {% if sessions.has_next %}<a href="{% querystring sessions=sessions.next_page_number session=session %}">Next</a>{% endif %}
+                </nav>
+                {% endif %}
+            </section>
+        </aside>
+
+        <div class="col-lg-8 col-xl-9">
+            {% if frame %}
+            <section class="pace-card p-3 p-md-4 mb-3" aria-labelledby="seg-frame">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h2 class="h4 mb-0" id="seg-frame">Frame {{ frame.frame_index }}</h2>
+                    {% if frame.hef_sha256 %}
+                    <span class="badge text-bg-success">HEF result</span>
+                    {% else %}
+                    <span class="badge text-bg-warning">Test mask</span>
+                    {% endif %}
+                </div>
+                <p class="small text-muted text-break mt-1 mb-2">{{ session }}</p>
+                {% if not frame.hef_sha256 %}<p class="small mb-2">This result uses a fixture mask supplied for testing.</p>{% endif %}
+
+                {% if tab == 'overview' %}
+                <dl class="row row-cols-2 row-cols-md-3 g-3 mt-1 mb-3">
+                    <div class="col"><dt>Model version</dt><dd class="mb-0 text-break">{{ frame.model_version }}</dd></div>
+                    <div class="col"><dt>Timing quality</dt><dd class="mb-0">{{ frame.timing_quality|capfirst }}</dd></div>
+                    <div class="col"><dt>Committed</dt><dd class="mb-0"><time datetime="{{ frame.committed_at|date:'c' }}">{{ frame.committed_at|date:'Y-m-d H:i:s T' }}</time></dd></div>
+                    <div class="col"><dt>Inference</dt><dd class="mb-0">{% if frame.inference_ms != None %}{{ frame.inference_ms|floatformat:1 }} ms{% else %}&mdash;{% endif %}</dd></div>
+                    <div class="col"><dt>Valid pixels</dt><dd class="mb-0">{{ frame.valid_pixel_count }}</dd></div>
+                    <div class="col"><dt>Void pixels</dt><dd class="mb-0">{{ frame.void_pixel_count }}</dd></div>
+                </dl>
+                <h3 class="h5">Shares of valid pixels</h3>
+                <dl class="row row-cols-2 row-cols-md-3 g-3 mt-0 mb-3">
+                    {% for label, value in metrics %}
+                    <div class="col"><dt>{{ label }}</dt><dd class="mb-0">{% if value != None %}{{ value|floatformat:1 }}%{% else %}&mdash;{% endif %}</dd></div>
+                    {% endfor %}
+                </dl>
+                {% if class_stats %}
+                <div class="pace-table-wrap">
+                    <table class="pace-data-table">
+                        <thead><tr><th scope="col">Class ID</th><th scope="col">Pixels</th><th scope="col">Share</th></tr></thead>
+                        <tbody>{% for id, count, share in class_stats %}<tr><th scope="row">{{ id }}</th><td>{{ count }}</td><td>{{ share|floatformat:1 }}%</td></tr>{% endfor %}</tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">This frame has no valid class pixels.</p>
+                {% endif %}
+
+                {% elif tab == 'preview' %}
+                <div class="row g-3 pt-2">
+                    <figure class="col-md-6 mb-0">
+                        <figcaption class="fw-bold mb-2">Source</figcaption>
+                        <img class="img-fluid rounded" src="{% url 'segmentation_artifact' frame.pk 'source.jpg' %}" alt="Source for frame {{ frame.frame_index }}" data-seg-preview>
+                        <p class="text-muted" hidden>Source image unavailable.</p>
+                    </figure>
+                    <figure class="col-md-6 mb-0">
+                        <figcaption class="fw-bold mb-2">Overlay</figcaption>
+                        <img class="img-fluid rounded" src="{% url 'segmentation_artifact' frame.pk 'overlay.png' %}" alt="Segmentation overlay for frame {{ frame.frame_index }}" data-seg-preview>
+                        <p class="text-muted" hidden>Overlay unavailable.</p>
+                    </figure>
+                </div>
+                <script>
+                    for (const image of document.querySelectorAll('[data-seg-preview]')) {
+                        function showUnavailable() {
+                            image.hidden = true;
+                            image.nextElementSibling.hidden = false;
+                        }
+                        image.addEventListener('error', showUnavailable);
+                        if (image.complete && image.naturalWidth === 0) showUnavailable();
+                    }
+                </script>
+
+                {% else %}
+                <h3 class="h5 mt-3">Session results</h3>
+                <p class="text-muted">CSV with one row per committed frame, including class counts, ratios, and model provenance.</p>
+                <a class="btn btn-pace-primary" href="{% url 'segmentation_export' session %}"><i class="bi bi-download" aria-hidden="true"></i> Download session CSV</a>
+                <h3 class="h5 mt-4">Frame files</h3>
+                <p class="text-muted">Image downloads depend on which files are still retained on SENSE.</p>
+                <div class="d-flex gap-2 flex-wrap">
+                    {% for name, label in downloads %}
+                    <a class="btn btn-pace-outline" href="{% url 'segmentation_artifact' frame.pk name %}?download=1">{{ label }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </section>
+
+            <section class="pace-card p-3 p-md-4" aria-labelledby="seg-frames">
+                <h2 class="h5" id="seg-frames">Committed frames ({{ frame_page.paginator.count }})</h2>
+                <div class="pace-table-wrap">
+                    <table class="pace-data-table">
+                        <thead><tr><th scope="col">Frame</th><th scope="col">Committed</th><th scope="col">Result</th></tr></thead>
+                        <tbody>
+                            {% for item in frame_page %}
+                            <tr>
+                                <th scope="row"><a href="{% querystring session=session frame=item.frame_index %}"{% if item.pk == frame.pk %} aria-current="true"{% endif %}>Frame {{ item.frame_index }}</a>{% if item.pk == frame.pk %} <span class="small text-muted">Selected</span>{% endif %}</th>
+                                <td>{{ item.committed_at|date:'Y-m-d H:i:s T' }}</td>
+                                <td>{% if item.hef_sha256 %}HEF{% else %}Test mask{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if frame_page.has_other_pages %}
+                <nav class="d-flex justify-content-between gap-2 mt-3" aria-label="Frame pages">
+                    {% if frame_page.has_previous %}<a href="{% querystring session=session page=frame_page.previous_page_number frame=None %}">Previous</a>{% endif %}
+                    <span class="text-muted">{{ frame_page.number }} of {{ frame_page.paginator.num_pages }}</span>
+                    {% if frame_page.has_next %}<a href="{% querystring session=session page=frame_page.next_page_number frame=None %}">Next</a>{% endif %}
+                </nav>
+                {% endif %}
+            </section>
+            {% else %}
+            <p class="pace-card p-4" role="status">No committed frames for this session. Select another session to inspect its results.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

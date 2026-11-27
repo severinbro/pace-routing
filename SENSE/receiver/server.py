@@ -32,6 +32,7 @@ except ImportError:
     redis_lib = None
 
 from verify import verify_session_structure
+from live_frame_state import AdmissionError, FrameStore
 
 LOG = logging.getLogger("halo-receiver")
 SESSION_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\Z")
@@ -51,7 +52,10 @@ def get_redis_client():
         return None
     if _REDIS_CLIENT is None:
         port = int(os.environ.get("REDIS_PORT", "6379"))
-        _REDIS_CLIENT = redis_lib.Redis(host=host, port=port, db=0, decode_responses=True)
+        _REDIS_CLIENT = redis_lib.Redis(
+            host=host, port=port, db=0, decode_responses=True,
+            socket_connect_timeout=2, socket_timeout=3,
+        )
     return _REDIS_CLIENT
 
 
@@ -198,7 +202,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             return
 
         session_id = match.group(1)
-        if not SESSION_NAME_RE.match(session_id):
+        if not SESSION_NAME_RE.match(session_id) or len(session_id) > 128:
             self.send_error_json(HTTPStatus.BAD_REQUEST, f"Invalid session ID: '{session_id}'")
             return
 
@@ -207,14 +211,18 @@ class ReceiverHandler(BaseHTTPRequestHandler):
 
         root = self.receiver_root
         root.mkdir(parents=True, exist_ok=True)
+        durable_live = os.getenv("SEGMENTATION_V2_ENABLED") == "true"
         min_free_mb = int(os.environ.get("MIN_FREE_DISK_MB", "2048"))
-        if shutil.disk_usage(root).free < min_free_mb * 1024 * 1024:
+        if not durable_live and shutil.disk_usage(root).free < min_free_mb * 1024 * 1024:
             self.send_error_json(HTTPStatus.INSUFFICIENT_STORAGE, "Insufficient free disk space on SENSE")
             return
 
         content_length_str = self.headers.get("Content-Length")
-        if not content_length_str or not content_length_str.isdigit():
+        if not content_length_str or not content_length_str.isascii() or not content_length_str.isdecimal():
             self.send_error_json(HTTPStatus.LENGTH_REQUIRED, "Content-Length header required")
+            return
+        if len(content_length_str) > 10:
+            self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Live frame payload exceeds 10 MB limit")
             return
         content_length = int(content_length_str)
         if content_length > MAX_LIVE_REQUEST_BYTES:
@@ -242,8 +250,14 @@ class ReceiverHandler(BaseHTTPRequestHandler):
         for part in message.iter_parts():
             field_name = part.get_param("name", header="content-disposition")
             if field_name == "image":
+                if durable_live and image_bytes is not None:
+                    self.send_json_response(400, {"error": "invalid_frame"})
+                    return
                 image_bytes = part.get_payload(decode=True)
             elif field_name == "meta":
+                if durable_live and meta_bytes is not None:
+                    self.send_json_response(400, {"error": "invalid_frame"})
+                    return
                 meta_bytes = part.get_payload(decode=True)
 
         if not image_bytes or not meta_bytes:
@@ -251,6 +265,9 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             return
         if len(image_bytes) > MAX_LIVE_IMAGE_BYTES:
             self.send_error_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Live frame image exceeds 5 MB limit")
+            return
+        if durable_live and len(meta_bytes) > 16 * 1024:
+            self.send_json_response(413, {"error": "body_too_large"})
             return
 
         try:
@@ -273,6 +290,32 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             return
         if not isinstance(capture_utc_ns, int) or isinstance(capture_utc_ns, bool) or capture_utc_ns < 0:
             self.send_error_json(HTTPStatus.BAD_REQUEST, "meta.capture_utc_ns must be a non-negative integer")
+            return
+
+        if durable_live:
+            if (
+                meta_session != session_id
+                or frame_index > 2**31 - 1
+                or capture_utc_ns > 2**63 - 1
+                or not image_bytes.startswith(b"\xff\xd8")
+            ):
+                self.send_json_response(400, {"error": "invalid_frame"})
+                return
+            store = FrameStore(os.getenv("SEGMENTATION_LIVE_ROOT", str(root / "live-v2")))
+            try:
+                status, state, reason = store.admit(
+                    get_redis_client(), f"{session_id}/{frame_index}", image_bytes, meta,
+                )
+            except AdmissionError as error:
+                self.send_json_response(error.status, {"error": error.reason})
+                return
+            except (OSError, ValueError, KeyError, TypeError, redis_lib.RedisError if redis_lib else OSError):
+                LOG.exception("Live frame admission unavailable: %s/%d", session_id, frame_index)
+                self.send_json_response(503, {"error": "admission_unavailable"})
+                return
+            self.send_json_response(status, {
+                "session_id": session_id, "frame_index": frame_index, "state": state, "reason": reason,
+            })
             return
 
         frame_dir_rel = f"{session_id}/frame_{frame_index:06d}"

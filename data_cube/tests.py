@@ -1,4 +1,5 @@
 """Integration checks for the SENSE/HALO admin split."""
+import csv
 import io
 import json
 from contextlib import closing
@@ -12,6 +13,140 @@ from django.contrib.auth.models import User
 from django.core.signals import request_finished
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+
+
+class SegmentationResultTests(TestCase):
+    def test_digest_replay_survives_expired_artifacts_and_conflict(self):
+        from hashlib import sha256
+
+        from django.test import RequestFactory
+        from PIL import Image
+
+        from .models import SegmentationFrame
+        from .segmentation_views import commit_frame
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            token = root / "token"
+            token.write_text("fixture-token", encoding="utf-8")
+            directory = root / "sessions" / "fixture-django" / "frames" / "0"
+            (directory / "masks").mkdir(parents=True)
+            source = directory / "source.jpg"
+            Image.new("RGB", (2, 1), (100, 100, 100)).save(source)
+            mask_bytes = io.BytesIO()
+            mask = Image.new("L", (2, 1), 255)
+            mask.putpixel((0, 0), 1)
+            mask.save(mask_bytes, format="PNG")
+            mask_sha = sha256(mask_bytes.getvalue()).hexdigest()
+            mask_file = directory / "masks" / f"{mask_sha}.png"
+            mask_file.write_bytes(mask_bytes.getvalue())
+            manifest = json.dumps({
+                "schema": 1, "model_version": "fixture", "hef_sha256": None, "mask_bit_depth": 8,
+                "void_ids": [255], "classes": {"1": {"rgb": [200, 0, 0]}}, "metric_groups": {"gvi": [1]},
+            }).encode()
+            manifest_id = sha256(manifest).hexdigest()
+            (root / "manifests").mkdir()
+            (root / "manifests" / f"{manifest_id}.json").write_bytes(manifest)
+            result = json.dumps({
+                "session_id": "fixture-django", "frame_index": 0, "capture_utc_ns": 123,
+                "qualified_capture_utc_ns": None, "timing_quality": "unqualified", "inference_ms": None,
+                "class_counts": {"1": 1}, "class_ratios_json": {"1": 1.0},
+                "valid_pixel_count": 1, "void_pixel_count": 1,
+                "gvi": 1.0, "sky_ratio": 0.0, "bsi": 0.0, "sidewalk_ratio": 0.0, "obstacle_ratio": 0.0,
+                "source_image_path": source.relative_to(root).as_posix(),
+                "source_sha256": sha256(source.read_bytes()).hexdigest(),
+                "mask_image_path": mask_file.relative_to(root).as_posix(), "mask_sha256": mask_sha,
+                "manifest_id": manifest_id, "model_version": "fixture", "hef_sha256": None,
+            }).encode()
+            factory = RequestFactory()
+
+            def post(payload, supplied="fixture-token"):
+                return commit_frame(factory.post(
+                    "/internal/segmentation/frames/", payload, content_type="application/json",
+                    HTTP_X_SENSE_SEGMENTATION_TOKEN=supplied,
+                ))
+
+            with override_settings(SEGMENTATION_RESULT_TOKEN_FILE=token, SEGMENTATION_LIVE_ROOT=root):
+                self.assertEqual(post(result, "wrong").status_code, 401)
+                self.assertEqual(post(result).status_code, 201)
+                self.assertEqual(post(result + b" ").status_code, 409)
+                self.assertEqual(mask_file.read_bytes(), mask_bytes.getvalue())
+                frame = SegmentationFrame.objects.get()
+                self.client.force_login(User.objects.create_user("fixture-reviewer", is_staff=True))
+                overlay_url = reverse("segmentation_artifact", args=[frame.pk, "overlay.png"])
+                preview = self.client.get(reverse("segmentation_tab", args=["preview"]))
+                self.assertContains(preview, overlay_url)
+                overlay = self.client.get(overlay_url)
+                self.assertEqual(overlay["Content-Type"], "image/png")
+                self.assertIn("no-store", overlay["Cache-Control"])
+                with Image.open(io.BytesIO(b"".join(overlay.streaming_content))) as image:
+                    self.assertEqual(list(image.get_flattened_data()), [(150, 50, 50), (100, 100, 100)])
+                download = self.client.get(reverse("segmentation_artifact", args=[frame.pk, "mask.png"]), {"download": 1})
+                self.assertIn("attachment", download["Content-Disposition"])
+                self.assertEqual(b"".join(download.streaming_content), mask_bytes.getvalue())
+                manifest_download = self.client.get(reverse("segmentation_artifact", args=[frame.pk, "manifest.json"]))
+                self.assertEqual(b"".join(manifest_download.streaming_content), manifest)
+                source.unlink()
+                mask_file.write_bytes(b"corrupt")
+                self.assertContains(self.client.get(reverse("segmentation_artifact", args=[frame.pk, "mask.png"])),
+                                    "failed verification", status_code=404)
+                mask_file.unlink()
+                self.assertEqual(self.client.get(overlay_url).status_code, 404)
+                self.assertContains(self.client.get(reverse("segmentation_dashboard")), "Test mask")
+                self.assertEqual(post(result).status_code, 200)
+                self.assertEqual(post(result + b" ").status_code, 409)
+                self.assertEqual(SegmentationFrame.objects.count(), 1)
+                self.assertEqual(SegmentationFrame.objects.get().result_sha256, sha256(result).hexdigest())
+
+    @override_settings(HALO_ENABLED=False)
+    def test_standalone_pages_paginate_and_export_selected_session_for_staff(self):
+        from .models import SegmentationFrame
+
+        dashboard = reverse("segmentation_dashboard")
+        preview = reverse("segmentation_tab", args=["preview"])
+        export = reverse("segmentation_tab", args=["export"])
+        csv_url = reverse("segmentation_export", args=["walk-a"])
+        staff = User.objects.create_user("segmentation-staff", is_staff=True)
+        participant = User.objects.create_user("segmentation-participant")
+        self.client.force_login(staff)
+        self.assertContains(self.client.get(dashboard), "No committed segmentation results yet")
+
+        base = {"capture_utc_ns": 123, "timing_quality": "unqualified", "model_version": "=test",
+                "valid_pixel_count": 4, "void_pixel_count": 44, "gvi": 0.75,
+                "class_counts": {"1": 3, "2": 1}, "class_ratios_json": {"1": 0.75, "2": 0.25}}
+        SegmentationFrame.objects.bulk_create([
+            SegmentationFrame(session_id="walk-a", frame_index=index, **base) for index in range(21)
+        ])
+        other = SegmentationFrame.objects.create(session_id="walk-b", frame_index=99, **base)
+        protected_artifact = reverse("segmentation_artifact", args=[other.pk, "source.jpg"])
+        for account in (None, participant):
+            self.client.logout()
+            if account:
+                self.client.force_login(account)
+            for url in (dashboard, preview, export, csv_url, protected_artifact):
+                self.assertEqual(self.client.get(url).status_code, 302)
+            self.assertNotContains(self.client.get(reverse("about")), dashboard)
+
+        self.client.force_login(staff)
+        page = self.client.get(dashboard, {"session": "walk-a"})
+        self.assertContains(page, "Committed frames (21)")
+        self.assertContains(page, "75.0%")
+        self.assertContains(page, 'aria-label="Segmentation"')
+        self.assertNotContains(page, "navigator.geolocation")
+        self.assertNotContains(page, protected_artifact)
+        self.assertEqual(len(page.context["frame_page"]), 20)
+        second = self.client.get(preview, {"session": "walk-a", "page": 2})
+        self.assertEqual(second.context["frame"].frame_index, 0)
+        self.assertEqual(len(second.context["frame_page"]), 1)
+        self.assertEqual(self.client.get(preview, {"session": "walk-a", "frame": 99}).status_code, 404)
+        self.assertContains(self.client.get(export, {"session": "walk-a"}), csv_url)
+        response = self.client.get(csv_url)
+        self.assertIn('filename="segmentation-walk-a.csv"', response["Content-Disposition"])
+        records = list(csv.DictReader(io.StringIO(b"".join(response.streaming_content).decode())))
+        self.assertEqual([row["frame_index"] for row in records], [str(index) for index in range(21)])
+        self.assertEqual({row["session_id"] for row in records}, {"walk-a"})
+        self.assertEqual(records[0]["model_version"], "'=test")
+        self.assertEqual(json.loads(records[0]["class_counts"]), {"1": 3, "2": 1})
 
 
 class PlatformNavigationTests(TestCase):

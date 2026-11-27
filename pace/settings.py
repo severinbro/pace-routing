@@ -175,6 +175,11 @@ HALO_ENABLED = os.environ.get('HALO_ENABLED', 'false').lower() == 'true'
 HALO_DASHBOARD_URL = os.environ.get('HALO_DASHBOARD_URL', 'http://dashboard:8080')
 HALO_INTERNAL_TOKEN_FILE = os.environ.get('HALO_INTERNAL_TOKEN_FILE', '/config/dashboard-internal.token')
 SENSE_DATA_DIR = Path(os.environ.get('SENSE_DATA_DIR', '/data'))
+SEGMENTATION_INTERNAL_ENABLED = os.environ.get('SEGMENTATION_INTERNAL_ENABLED', 'false').lower() == 'true'
+SEGMENTATION_LIVE_ROOT = Path(os.environ.get('SEGMENTATION_LIVE_ROOT', str(SENSE_DATA_DIR / 'live-v2')))
+SEGMENTATION_RESULT_TOKEN_FILE = Path(
+    os.environ.get('SEGMENTATION_RESULT_TOKEN_FILE', '/run/secrets/segmentation_internal')
+)
 OFFLINE_MBTILES_PATH = Path(
     os.environ.get('OFFLINE_MBTILES_PATH', str(SENSE_DATA_DIR / 'maps' / 'offline.mbtiles'))
 )

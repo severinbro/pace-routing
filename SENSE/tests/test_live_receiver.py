@@ -143,6 +143,40 @@ class LiveReceiverTests(unittest.TestCase):
             status, _ = self._post("/halo-upload/v2/sessions/s-disk/frames", body, ctype, token=self.token)
         self.assertEqual(status, 507)
 
+    @unittest.skipUnless(sys.platform.startswith("linux"), "durable path uses Linux file locks")
+    def test_durable_retry_after_failed_registration_and_receipts_at_capacity(self):
+        from live_frame_state import FrameStore, save_json
+
+        durable_root = self.root / "live-v2"
+        if durable_root.exists():
+            shutil.rmtree(durable_root)
+        redis = self.fake_redis
+        metadata = {"session_id": "durable", "frame_index": 0, "capture_utc_ns": 123}
+        body, content_type = build_multipart(json.dumps(metadata).encode(), b"\xff\xd8\xff\xd9")
+        path = "/halo-upload/v2/sessions/durable/frames"
+        env = {
+            "SEGMENTATION_V2_ENABLED": "true",
+            "SEGMENTATION_ADMISSION_ENABLED": "true",
+            "SEGMENTATION_LIVE_ROOT": str(durable_root),
+        }
+        with (
+            patch.dict(os.environ, env),
+            patch.object(redis, "get", return_value='{"adapter":"test"}', create=True),
+            patch.object(redis, "eval", side_effect=[OSError("Redis down"), None], create=True),
+        ):
+            self.assertEqual(self._post(path, body, content_type, self.token)[0], 503)
+            frame = FrameStore(durable_root).frame("durable/0")
+            self.assertTrue((frame / "stage.json").is_file())
+            self.assertFalse((frame / "accepted.json").exists())
+            self.assertEqual(self._post(path, body, content_type, self.token)[0], 201)
+            self.assertTrue((frame / "accepted.json").is_file())
+            with patch.dict(os.environ, {"MIN_FREE_DISK_MB": "1000000000"}):
+                self.assertEqual(self._post(path, body, content_type, self.token)[0], 200)
+                conflict, ctype = build_multipart(json.dumps(metadata).encode(), b"\xff\xd8changed")
+                self.assertEqual(self._post(path, conflict, ctype, self.token)[0], 409)
+                save_json(frame.parent.parent / "retired.json", {"session_id": "durable"})
+                self.assertEqual(self._post(path, body, content_type, self.token)[0], 410)
+
     def test_idempotent_write_and_redis_queue_cap_eviction(self):
         for idx in range(4):
             meta = json.dumps({"session_id": "walk-1", "frame_index": idx, "capture_utc_ns": 1000 + idx}).encode()

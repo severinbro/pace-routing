@@ -1,0 +1,179 @@
+name: pace-seg-fixture
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - queue:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pace
+      POSTGRES_USER: pace
+      POSTGRES_PASSWORD: fixture-only-db-password
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "pace", "-d", "pace"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  receiver:
+    build:
+      context: ..
+      dockerfile: docker/receiver.Dockerfile
+    environment:
+      RECEIVER_ROOT: /data
+      UPLOAD_TOKEN_FILE: /run/secrets/halo_upload
+      REDIS_HOST: redis
+      SEGMENTATION_V2_ENABLED: "true"
+      SEGMENTATION_ADMISSION_ENABLED: "true"
+      SEGMENTATION_FIXTURE_INDEX: /fixtures/index.json
+      SEGMENTATION_PENDING_MAX_FRAMES: "16"
+      SEGMENTATION_PENDING_MAX_BYTES: "67108864"
+      SEGMENTATION_LIVE_MAX_BYTES: "134217728"
+      MIN_FREE_DISK_MB: "64"
+    volumes:
+      - data:/data
+      - fixture:/fixtures:ro
+      - secrets:/run/secrets:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  pace-web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.sense
+    environment:
+      PACE_DB_HOST: db
+      PACE_DB_NAME: pace
+      PACE_DB_USER: pace
+      PACE_DB_PASSWORD: fixture-only-db-password
+      PACE_DJANGO_SECRET_KEY: fixture-only-django-key-for-isolated-test-stack
+      PACE_ALLOWED_HOSTS: pace-web,web,localhost,fixture-ingress,root-ingress,testserver
+      SENSE_HARDWARE_AVAILABLE: "false"
+      SEGMENTATION_INTERNAL_ENABLED: "true"
+    volumes:
+      - data:/data:ro
+      - secrets:/run/secrets:ro
+      - output:/fixture-output
+    networks:
+      default:
+        aliases: ["web"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import http.client; c=http.client.HTTPConnection('localhost',8000,timeout=2); c.request('GET','/internal/segmentation/frames/'); assert c.getresponse().status==405"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  fixture-worker:
+    build:
+      context: ..
+      dockerfile: docker/segmentation_fixture.Dockerfile
+    image: pace-seg-fixture-worker:local
+    command: ["python", "-m", "hailo_worker.worker"]
+    restart: "on-failure:5"
+    environment:
+      SEGMENTATION_ADAPTER: fixture
+      SEGMENTATION_FIXTURE_FAULTS: /faults
+      SEGMENTATION_RESULT_URL: http://fixture-fault-proxy:8090/internal/segmentation/frames/
+      SEGMENTATION_RECONCILE_INTERVAL_S: "1"
+      SEGMENTATION_DEFER_S: "3"
+    volumes:
+      - data:/data
+      - fixture:/fixtures:ro
+      - secrets:/run/secrets:ro
+      - faults:/faults
+    depends_on:
+      redis:
+        condition: service_healthy
+      pace-web:
+        condition: service_healthy
+      fixture-fault-proxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; assert redis.Redis(host='redis').get('halo:live:v2:heartbeat')"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  fixture-fault-proxy:
+    image: pace-seg-fixture-worker:local
+    build:
+      context: ..
+      dockerfile: docker/segmentation_fixture.Dockerfile
+    command: ["python", "/repo/SENSE/tests/segmentation_fault_proxy.py"]
+    volumes:
+      - ../..:/repo:ro
+      - faults:/faults
+
+  fixture-ingress:
+    image: nginx:1.27-alpine
+    environment:
+      SENSE_HTTPS_PORT: "443"
+      NGINX_ENVSUBST_FILTER: "^SENSE_HTTPS_PORT$"
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+    volumes:
+      - ../config/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+      - secrets:/etc/nginx/certs:ro
+    depends_on:
+      receiver:
+        condition: service_healthy
+      pace-web:
+        condition: service_healthy
+
+  root-ingress:
+    image: nginx:1.27-alpine
+    volumes:
+      - ../../nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - secrets:/etc/nginx/certs:ro
+    depends_on:
+      pace-web:
+        condition: service_healthy
+
+  fixture-runner:
+    profiles: ["tools"]
+    image: pace-seg-fixture-worker:local
+    build:
+      context: ..
+      dockerfile: docker/segmentation_fixture.Dockerfile
+    working_dir: /repo
+    environment:
+      PYTHONPATH: /repo:/repo/SENSE:/repo/SENSE/receiver
+    volumes:
+      - ../..:/repo:ro
+      - data:/data:ro
+      - fixture:/fixtures
+      - secrets:/run/secrets
+      - faults:/faults
+      - output:/fixture-output:ro
+
+volumes:
+  queue:
+  postgres:
+  data:
+  fixture:
+  secrets:
+  faults:
+  output:
+
+networks:
+  default:
+    internal: true
