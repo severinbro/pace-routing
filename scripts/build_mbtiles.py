@@ -20,8 +20,8 @@ from pathlib import Path
 
 # Default bounding box: Mainz (city center + Hochschule Mainz campus)
 DEFAULT_BBOX = (49.955, 8.185, 50.030, 8.315)  # south, west, north, east
-DEFAULT_TILE_URL = "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
-USER_AGENT = "PACE-Routing-OfflineMapBuilder/1.0 (Academic Urban Comfort Research)"
+DEFAULT_TILE_URL = "https://tile.openstreetmap.de/{z}/{x}/{y}.png"
+USER_AGENT = "PACE-Routing-Academic-Research/1.0 (https://pace-routing.com)"
 
 
 def deg2num(lat_deg: float, lon_deg: float, zoom: int) -> tuple[int, int]:
@@ -58,7 +58,7 @@ def init_mbtiles(conn: sqlite3.Connection, name: str, bbox: tuple[float, float, 
         "center": f"{center_lon:.6f},{center_lat:.6f},{default_zoom}",
         "minzoom": str(min_zoom),
         "maxzoom": str(max_zoom),
-        "attribution": "© OpenStreetMap contributors © CARTO",
+        "attribution": "© OpenStreetMap contributors",
     }
     conn.execute("DELETE FROM metadata")
     conn.executemany("INSERT INTO metadata (name, value) VALUES (?, ?)", metadata.items())
@@ -121,11 +121,21 @@ def build_archive(output: Path, bbox: tuple[float, float, float, float],
             if delay > 0:
                 time.sleep(delay)
         conn.commit()
+        distinct_count, total_stored = conn.execute(
+            "SELECT COUNT(DISTINCT tile_data), COUNT(*) FROM tiles"
+        ).fetchone()
     finally:
         conn.close()
 
     size_mb = output.stat().st_size / (1024 * 1024)
-    print(f"Done: {output} ({size_mb:.2f} MiB) — downloaded={downloaded}, skipped={skipped}, failed={failed}")
+    print(
+        f"Done: {output} ({size_mb:.2f} MiB) — downloaded={downloaded}, skipped={skipped}, "
+        f"failed={failed}, distinct={distinct_count}/{total_stored}"
+    )
+    if total_stored > 5 and distinct_count <= 1:
+        raise RuntimeError(
+            "All downloaded tiles are identical — the tile provider likely returned a placeholder or API-key error image."
+        )
 
 
 def main() -> int:
@@ -143,7 +153,7 @@ def main() -> int:
     parser.add_argument("--min-zoom", type=int, default=12)
     parser.add_argument("--max-zoom", type=int, default=16)
     parser.add_argument("--tile-url", default=DEFAULT_TILE_URL)
-    parser.add_argument("--delay", type=float, default=0.05, help="Delay between tile requests in seconds")
+    parser.add_argument("--delay", type=float, default=0.1, help="Delay between tile requests in seconds")
     args = parser.parse_args()
 
     build_archive(
