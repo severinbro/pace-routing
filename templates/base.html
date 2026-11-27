@@ -44,11 +44,11 @@
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}" title="Map">
                     <i class="bi bi-map"></i>
                 </a>
-            {% else %}
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Survey">
-                    <i class="bi bi-clipboard-check"></i>
-                </a>
             {% endif %}
+
+            <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Participant Survey">
+                <i class="bi bi-clipboard-check"></i>
+            </a>
 
             <div class="d-flex align-items-center ms-auto flex-shrink-0">
                 <button type="button" id="theme-toggle" class="nav-item nav-link btn btn-link border-0 text-decoration-none" title="Toggle dark mode" aria-label="Toggle dark mode">

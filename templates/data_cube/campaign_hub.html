@@ -39,7 +39,7 @@
         <div id="campaign-status-area">
             {% if campaign.active %}
             <div class="d-flex align-items-center gap-3 flex-wrap">
-                <span class="pace-badge" style="background: var(--pace-mint); color: var(--pace-ink);">
+                <span class="pace-badge" style="background: var(--pace-mint); color: #1A1E38;">
                     <i class="bi bi-record-circle"></i> Active
                 </span>
                 <span class="fw-bold">Stop <span id="current-stop">{{ campaign.current_stop }}</span> / <span id="total-stops">{{ campaign.total_stops }}</span></span>
@@ -145,7 +145,7 @@
                     if (!document.getElementById('current-stop')) {
                         statusArea.innerHTML =
                             '<div class="d-flex align-items-center gap-3 flex-wrap">' +
-                            '  <span class="pace-badge" style="background: var(--pace-mint); color: var(--pace-ink);">' +
+                            '  <span class="pace-badge" style="background: var(--pace-mint); color: #1A1E38;">' +
                             '    <i class="bi bi-record-circle"></i> Active' +
                             '  </span>' +
                             '  <span class="fw-bold">Stop <span id="current-stop"></span> / <span id="total-stops"></span></span>' +

@@ -82,8 +82,8 @@
     <!-- Progress indicator -->
     <div class="d-flex justify-content-center gap-2 mb-4">
         <span class="pace-badge" id="phase-dot-1" style="background: var(--pace-coral); color: #fff;">1</span>
-        <span class="pace-badge" id="phase-dot-2" style="background: #fff; color: var(--pace-muted);">2</span>
-        <span class="pace-badge" id="phase-dot-3" style="background: #fff; color: var(--pace-muted);">3</span>
+        <span class="pace-badge" id="phase-dot-2" style="background: var(--pace-card); color: var(--pace-muted);">2</span>
+        <span class="pace-badge" id="phase-dot-3" style="background: var(--pace-card); color: var(--pace-muted);">3</span>
     </div>
 
     <form method="POST" id="survey-form">
@@ -92,7 +92,7 @@
         <!-- ===== PHASE 1: Environmental Features (q1-q7) ===== -->
         <div id="phase-1">
             <div class="text-center mb-3">
-                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 1 of 3 — Environmental Features</span>
+                <span class="pace-badge" style="background: var(--pace-sun); color: #1A1E38;">Phase 1 of 3 — Environmental Features</span>
             </div>
 
             {% for feature in phase1_features %}
@@ -124,7 +124,7 @@
         <!-- ===== PHASE 2: Personal Perception (q8-q10) ===== -->
         <div id="phase-2" style="display: none;">
             <div class="text-center mb-3">
-                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 2 of 3 — Personal Perception</span>
+                <span class="pace-badge" style="background: var(--pace-sun); color: #1A1E38;">Phase 2 of 3 — Personal Perception</span>
             </div>
 
             {% for question in phase2_questions %}
@@ -158,7 +158,7 @@
         <!-- ===== PHASE 3: Overall Comfort (q11) ===== -->
         <div id="phase-3" style="display: none;">
             <div class="text-center mb-3">
-                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Phase 3 of 3 — Overall Comfort</span>
+                <span class="pace-badge" style="background: var(--pace-sun); color: #1A1E38;">Phase 3 of 3 — Overall Comfort</span>
             </div>
 
             <div class="pace-card mb-3 pace-card-hover">
@@ -190,7 +190,7 @@
         <!-- ===== PHASE 4: Thank You ===== -->
         <div id="phase-4" style="display: none;">
             <div class="text-center mb-3">
-                <span class="pace-badge" style="background: var(--pace-sun); color: var(--pace-ink);">Survey Complete</span>
+                <span class="pace-badge" style="background: var(--pace-sun); color: #1A1E38;">Survey Complete</span>
             </div>
 
             <div class="pace-card mb-3">
@@ -234,7 +234,7 @@
                 dot.style.background = 'var(--pace-coral)';
                 dot.style.color = '#fff';
             } else {
-                dot.style.background = '#fff';
+                dot.style.background = 'var(--pace-card)';
                 dot.style.color = 'var(--pace-muted)';
             }
         }
