@@ -5,7 +5,7 @@ from . import views
 from . import halo_views
 
 urlpatterns = [
-    path('favicon.ico', RedirectView.as_view(url='/static/img/logo_nobg.png', permanent=True)),
+    path('favicon.ico', RedirectView.as_view(url='/static/img/favicon.png', permanent=False)),
     # --- TAB NAVIGATION ---
     # The empty path renders the environmental survey directly
     path('', views.surveys_tab, name='surveys_tab'),
