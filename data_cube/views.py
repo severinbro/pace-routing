@@ -8,7 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 from django.conf import settings
-import redis, json, subprocess, logging, os
+import redis, json, subprocess, logging, os, sqlite3
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -86,11 +87,84 @@ class RoleLoginView(LoginView):
         return reverse('about')
 
 
+def _read_mbtiles_metadata(mbtiles_path: Path) -> dict:
+    """Reads MBTiles metadata table if the SQLite archive exists."""
+    if not mbtiles_path.is_file():
+        return {}
+    try:
+        with sqlite3.connect(f'file:{mbtiles_path}?mode=ro', uri=True) as conn:
+            rows = conn.execute('SELECT name, value FROM metadata').fetchall()
+        return {str(k): str(v) for k, v in rows}
+    except sqlite3.Error as exc:
+        logger.warning('Failed to read MBTiles metadata from %s: %s', mbtiles_path, exc)
+        return {}
+
+
 # --- ADMIN-ONLY: MAP ---
 @staff_member_required(login_url='admin_login')
 def map_tab(request):
-    """Renders the offline OSM map."""
-    return render(request, 'data_cube/map.html')
+    """Renders the offline MBTiles Leaflet map."""
+    mbtiles_path = Path(settings.OFFLINE_MBTILES_PATH)
+    meta = _read_mbtiles_metadata(mbtiles_path)
+    center_lat, center_lon, default_zoom = 49.9929, 8.2473, 13
+    if 'center' in meta:
+        try:
+            parts = [float(p.strip()) for p in meta['center'].split(',')]
+            if len(parts) >= 2:
+                center_lon, center_lat = parts[0], parts[1]
+            if len(parts) >= 3:
+                default_zoom = int(round(parts[2]))
+        except ValueError:
+            pass
+    try:
+        min_zoom = int(meta.get('minzoom', 11))
+    except ValueError:
+        min_zoom = 11
+    try:
+        max_zoom = int(meta.get('maxzoom', 18))
+    except ValueError:
+        max_zoom = 18
+    return render(request, 'data_cube/map.html', {
+        'mbtiles_available': mbtiles_path.is_file(),
+        'mbtiles_name': meta.get('name', 'Offline Map'),
+        'center_lat': center_lat,
+        'center_lon': center_lon,
+        'default_zoom': default_zoom,
+        'min_zoom': min_zoom,
+        'max_zoom': max_zoom,
+    })
+
+
+@staff_member_required(login_url='admin_login')
+def offline_tile(request, z: int, x: int, y: int):
+    """Serves a single raster map tile directly from a local MBTiles SQLite file."""
+    if z < 0 or z > 22 or x < 0 or y < 0:
+        return HttpResponse(status=400)
+    mbtiles_path = Path(settings.OFFLINE_MBTILES_PATH)
+    if not mbtiles_path.is_file():
+        return HttpResponse(status=204)
+    tms_y = (1 << z) - 1 - y
+    try:
+        with sqlite3.connect(f'file:{mbtiles_path}?mode=ro', uri=True) as conn:
+            row = conn.execute(
+                'SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?',
+                (z, x, tms_y),
+            ).fetchone()
+    except sqlite3.Error as exc:
+        logger.warning('MBTiles query failed for %d/%d/%d: %s', z, x, y, exc)
+        return HttpResponse(status=500)
+    if not row or not row[0]:
+        return HttpResponse(status=204)
+    blob = bytes(row[0])
+    if blob.startswith(b'\xff\xd8'):
+        content_type = 'image/jpeg'
+    elif blob[:4] == b'RIFF' and blob[8:12] == b'WEBP':
+        content_type = 'image/webp'
+    else:
+        content_type = 'image/png'
+    response = HttpResponse(blob, content_type=content_type)
+    response['Cache-Control'] = 'public, max-age=86400'
+    return response
 
 # --- ADMIN-ONLY: MEASUREMENT DASHBOARD ---
 @staff_member_required(login_url='admin_login')

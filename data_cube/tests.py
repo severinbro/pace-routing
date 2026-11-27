@@ -2,6 +2,7 @@
 import io
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 from unittest.mock import patch
 import zipfile
@@ -128,3 +129,29 @@ class PlatformNavigationTests(TestCase):
                 {'username': 'operator', 'password': 'test-password'}, HTTP_X_REAL_IP=address).status_code, 429)
         finally:
             r.delete(key)
+
+    def test_offline_mbtiles_serving(self):
+        png_bytes = b'\x89PNG\r\n\x1a\n' + b'\x00' * 16
+        with tempfile.TemporaryDirectory() as tmp:
+            mbtiles = Path(tmp) / 'offline.mbtiles'
+            z, x, y = 13, 4283, 2776
+            tms_y = (1 << z) - 1 - y
+            with sqlite3.connect(str(mbtiles)) as conn:
+                conn.execute('CREATE TABLE metadata (name TEXT, value TEXT)')
+                conn.execute('INSERT INTO metadata VALUES (?, ?)', ('name', 'Test Mainz'))
+                conn.execute('INSERT INTO metadata VALUES (?, ?)', ('center', '8.2473,49.9929,14'))
+                conn.execute('CREATE TABLE tiles (zoom_level INTEGER, tile_column INTEGER, tile_row INTEGER, tile_data BLOB)')
+                conn.execute('INSERT INTO tiles VALUES (?, ?, ?, ?)', (z, x, tms_y, sqlite3.Binary(png_bytes)))
+                conn.commit()
+            with override_settings(OFFLINE_MBTILES_PATH=mbtiles):
+                self.client.force_login(self.staff)
+                map_resp = self.client.get(reverse('map_tab'))
+                self.assertEqual(map_resp.status_code, 200)
+                self.assertContains(map_resp, '/tiles/{z}/{x}/{y}.png')
+                self.assertContains(map_resp, 'Test Mainz')
+                tile_resp = self.client.get(reverse('offline_tile', args=[z, x, y]))
+                self.assertEqual(tile_resp.status_code, 200)
+                self.assertEqual(tile_resp['Content-Type'], 'image/png')
+                self.assertEqual(tile_resp.content, png_bytes)
+                missing_resp = self.client.get(reverse('offline_tile', args=[z, x + 1, y]))
+                self.assertEqual(missing_resp.status_code, 204)

@@ -35,7 +35,10 @@ to the project Info page at `/about/`). Staff navigation provides dedicated sect
 for **SENSE** (live Sensor Dashboard `/dashboard/` and Data & Export `/data-browser/`),
 **HALO** (HALO Controller `/halo/`, live Sensor Dashboard `/halo/dashboard/`, and
 Data & Export `/halo/data/`), **Campaigns & Participants**
-(`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`), along with a top-right light/dark theme toggle.
+(`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`, backed by a lightweight
+offline MBTiles SQLite archive at `SENSE/data/maps/offline.mbtiles` served directly via
+`/tiles/{z}/{x}/{y}.png` — generate with `python3 scripts/build_mbtiles.py`), along with a
+top-right light/dark theme toggle.
 HALO uses its locally installed image and can [record and extract locally](HALO/README.md#test-a-capture-without-sense)
 while SENSE is offline.
 

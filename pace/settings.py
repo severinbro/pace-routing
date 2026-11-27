@@ -158,6 +158,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 HALO_DASHBOARD_URL = os.environ.get('HALO_DASHBOARD_URL', 'http://dashboard:8080')
 HALO_INTERNAL_TOKEN_FILE = os.environ.get('HALO_INTERNAL_TOKEN_FILE', '/config/dashboard-internal.token')
 SENSE_DATA_DIR = Path(os.environ.get('SENSE_DATA_DIR', '/data'))
+OFFLINE_MBTILES_PATH = Path(
+    os.environ.get('OFFLINE_MBTILES_PATH', str(SENSE_DATA_DIR / 'maps' / 'offline.mbtiles'))
+)
 SENSE_HARDWARE_AVAILABLE = os.environ.get('SENSE_HARDWARE_AVAILABLE', 'true').lower() == 'true'
 
 # Default primary key field type
