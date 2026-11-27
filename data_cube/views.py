@@ -572,10 +572,14 @@ def create_user(request):
             user = form.save(commit=False)
             user.is_staff = False  # Non-admin: no dashboard/map/data access
             user.save()
-            return redirect('sense_home')
+            from urllib.parse import urlencode
+            return redirect(f"{reverse('create_user')}?{urlencode({'created': user.username})}")
     else:
         form = UserCreationForm()
-    return render(request, 'data_cube/create_user.html', {'form': form})
+    return render(request, 'data_cube/create_user.html', {
+        'form': form,
+        'created_username': request.GET.get('created', ''),
+    })
 
 # --- PUBLIC: SELF-SERVICE SIGN UP ---
 def sign_up(request):

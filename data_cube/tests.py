@@ -155,3 +155,23 @@ class PlatformNavigationTests(TestCase):
                 self.assertEqual(tile_resp.content, png_bytes)
                 missing_resp = self.client.get(reverse('offline_tile', args=[z, x + 1, y]))
                 self.assertEqual(missing_resp.status_code, 204)
+
+    def test_create_participant_shows_errors_and_success(self):
+        self.client.force_login(self.staff)
+        bad = self.client.post(reverse('create_user'), {
+            'username': 'walker01',
+            'password1': '1234',
+            'password2': '1234',
+        })
+        self.assertEqual(bad.status_code, 200)
+        self.assertContains(bad, 'too short')
+        good = self.client.post(reverse('create_user'), {
+            'username': 'walker01',
+            'password1': 'FieldWalk2026!',
+            'password2': 'FieldWalk2026!',
+        }, follow=True)
+        self.assertEqual(good.status_code, 200)
+        self.assertContains(good, 'walker01')
+        self.assertContains(good, 'was created')
+        created = User.objects.get(username='walker01')
+        self.assertFalse(created.is_staff)
