@@ -41,8 +41,10 @@ SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 # uses the external nginx port (443, omitted as the HTTPS default), so the
 # trusted origin must NOT include :8000. Keep the :8000 variant only for
 # direct Gunicorn access during local debugging.
-CSRF_TRUSTED_ORIGINS = [
+_DEFAULT_CSRF_ORIGINS = [
+    'https://10.42.10.1',
     'https://10.42.10.1:18443',
+    'https://pace-sense.local',
     'https://pace-sense.local:18443',
     'https://10.42.0.1',
     'https://10.42.0.1:8000',
@@ -50,6 +52,12 @@ CSRF_TRUSTED_ORIGINS = [
     'https://localhost',
     'http://localhost:8000',
 ]
+_extra_csrf = [
+    origin.strip()
+    for origin in os.environ.get('PACE_CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_DEFAULT_CSRF_ORIGINS + _extra_csrf))
 SESSION_COOKIE_SECURE = os.environ.get('PACE_SECURE_COOKIES', 'false').lower() == 'true'
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
@@ -90,6 +98,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'data_cube.context_processors.feature_flags',
             ],
         },
     },
@@ -158,6 +167,7 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+HALO_ENABLED = os.environ.get('HALO_ENABLED', 'false').lower() == 'true'
 HALO_DASHBOARD_URL = os.environ.get('HALO_DASHBOARD_URL', 'http://dashboard:8080')
 HALO_INTERNAL_TOKEN_FILE = os.environ.get('HALO_INTERNAL_TOKEN_FILE', '/config/dashboard-internal.token')
 SENSE_DATA_DIR = Path(os.environ.get('SENSE_DATA_DIR', '/data'))

@@ -18,6 +18,7 @@ class PlatformNavigationTests(TestCase):
         self.staff = User.objects.create_user('operator', password='test-password', is_staff=True)
         self.participant = User.objects.create_user('participant', password='test-password')
 
+    @override_settings(HALO_ENABLED=True)
     def test_staff_can_open_both_sections(self):
         self.client.force_login(self.staff)
         self.assertRedirects(self.client.get(reverse('admin_home')), reverse('about'))
@@ -116,6 +117,7 @@ class PlatformNavigationTests(TestCase):
         self.assertEqual(stop_resp.status_code, 302)
         self.assertIn('/login/', stop_resp['Location'])
 
+    @override_settings(HALO_ENABLED=True)
     def test_halo_data_browser_and_exports(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -149,6 +151,7 @@ class PlatformNavigationTests(TestCase):
                     self.assertIn(f'{sid}/pairs.csv', names)
                     self.assertNotIn(f'{sid}/frames/left/frame_000000.jpg', names)
 
+    @override_settings(HALO_ENABLED=True)
     def test_halo_actions_require_post_and_csrf(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.staff)
@@ -161,6 +164,7 @@ class PlatformNavigationTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['error'], 'HALO is not ready')
 
+    @override_settings(HALO_ENABLED=True)
     def test_poweroff_actions_require_post_csrf_and_staff(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.staff)
@@ -281,3 +285,11 @@ class PlatformNavigationTests(TestCase):
                     r.delete(k)
                 else:
                     r.set(k, val)
+
+    @override_settings(HALO_ENABLED=False)
+    def test_halo_disabled_hides_nav_and_returns_404(self):
+        self.client.force_login(self.staff)
+        about_resp = self.client.get(reverse('about'))
+        self.assertNotContains(about_resp, reverse('halo_home'))
+        for route in ('halo_home', 'halo_dashboard', 'halo_data', 'halo_status'):
+            self.assertEqual(self.client.get(reverse(route)).status_code, 404)

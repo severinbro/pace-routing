@@ -9,11 +9,8 @@ Validates extracted HALO session directories against Protocol v1 invariants:
 
 import hashlib
 import json
-import logging
 from pathlib import Path
 from typing import Tuple
-
-LOG = logging.getLogger("halo-verify")
 
 MANDATORY_FILES = (
     "capture.json",

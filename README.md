@@ -229,7 +229,7 @@ sudo nmcli connection modify Hotspot connection.autoconnect yes connection.autoc
 
 1. Clone this repository to your Raspberry Pi:
 ```bash
-git clone https://github.com/severinbro/pace-routing.git
+git clone https://github.com/sebroccoli/pace-routing.git
 cd pace-routing
 ```
 

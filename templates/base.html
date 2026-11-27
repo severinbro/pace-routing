@@ -34,9 +34,11 @@
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' or request.resolver_match.url_name == 'dashboard_tab' or request.resolver_match.url_name == 'data_browser' %}active{% endif %}" href="{% url 'sense_home' %}">
                     <i class="bi bi-cpu"></i> <span>SENSE</span>
                 </a>
+                {% if halo_enabled %}
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' or request.resolver_match.url_name == 'halo_dashboard' or request.resolver_match.url_name == 'halo_data' %}active{% endif %}" href="{% url 'halo_home' %}">
                     <i class="bi bi-camera-video"></i> <span>HALO</span>
                 </a>
+                {% endif %}
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' or request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'campaign_hub' %}" title="Campaigns &amp; Participants">
                     <i class="bi bi-clipboard2-data-fill"></i>
                 </a>

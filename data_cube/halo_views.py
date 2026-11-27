@@ -1,6 +1,7 @@
 """Staff-only HALO screen and server-side bridge to SENSE's control service."""
 import csv
 from datetime import datetime
+from functools import wraps
 import io
 import json
 import os
@@ -13,9 +14,18 @@ import zipfile
 
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
+
+
+def _require_halo_enabled(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not settings.HALO_ENABLED:
+            raise Http404('HALO integration is disabled')
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 SESSION_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*\Z')
 EXPORTABLE_ARTIFACTS = (
@@ -51,12 +61,14 @@ def control_request(path, method='GET'):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_home(request):
     return render(request, 'data_cube/halo_home.html')
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_status(request):
     code, payload = control_request('status')
@@ -64,6 +76,7 @@ def halo_status(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_sessions(request):
     code, payload = control_request('sessions')
@@ -71,6 +84,7 @@ def halo_sessions(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_POST
 def halo_start(request):
     code, payload = control_request('recordings/start', 'POST')
@@ -78,6 +92,7 @@ def halo_start(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_POST
 def halo_stop(request):
     code, payload = control_request('recordings/stop', 'POST')
@@ -85,6 +100,7 @@ def halo_stop(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_POST
 def halo_poweroff(request):
     code, payload = control_request('poweroff', 'POST')
@@ -143,12 +159,14 @@ def _collect_halo_sessions() -> list[dict]:
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_dashboard(request):
     return render(request, 'data_cube/halo_dashboard.html')
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_data(request):
     sessions = _collect_halo_sessions()
@@ -161,6 +179,7 @@ def halo_data(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_export_summary_csv(request):
     sessions = _collect_halo_sessions()
@@ -185,6 +204,7 @@ def halo_export_summary_csv(request):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_export_artifact(request, session_id, artifact):
     if artifact not in EXPORTABLE_ARTIFACTS:
@@ -207,6 +227,7 @@ def halo_export_artifact(request, session_id, artifact):
 
 
 @staff_member_required(login_url='admin_login')
+@_require_halo_enabled
 @require_GET
 def halo_export_zip(request, session_id):
     if not SESSION_RE.fullmatch(session_id):

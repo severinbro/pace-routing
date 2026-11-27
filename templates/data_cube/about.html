@@ -102,9 +102,11 @@
         <a href="{% url 'sense_home' %}" class="btn btn-pace-mint px-4">
             <i class="bi bi-cpu"></i> SENSE
         </a>
+        {% if halo_enabled %}
         <a href="{% url 'halo_home' %}" class="btn btn-pace-outline px-4">
             <i class="bi bi-camera-video"></i> HALO
         </a>
+        {% endif %}
         {% endif %}
     </div>
 </div>

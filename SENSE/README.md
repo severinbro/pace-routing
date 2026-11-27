@@ -47,12 +47,12 @@ replace the verified v1 archive.
 ```text
 pace-routing/SENSE/
 ├── compose.yaml              # Docker Compose (Nginx, Receiver, Dashboard, PACE web, DB, Redis, NTP)
-├── .env.example              # Vorlage für Ports, UIDs, Pfade
+├── .env.example              # Template for ports, UIDs, and paths
 ├── 3d_print_files/           # SENSE enclosure and mounts (STL/Blender)
 ├── config/
-│   ├── nginx.conf            # Nginx-Vorlage für Streaming und HTTPS-Weiterleitung
-│   ├── pace.env.example      # Vorlage für Datenbank- und Django-Umgebung
-│   ├── generate_certs.sh     # Hilfsskript für TLS certificates
+│   ├── nginx.conf            # Nginx template for streaming and HTTPS termination
+│   ├── pace.env.example      # Template for database and Django environment
+│   ├── generate_certs.sh     # Helper script for TLS certificates
 │   ├── certs/                # TLS certificates (server.crt, server.key)
 │   └── upload.token          # Shared Bearer token (0600)
 ├── docker/
