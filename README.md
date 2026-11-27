@@ -30,9 +30,13 @@ Run `docker compose` from the directory for the Pi you are operating.
 
 Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
-copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account. Staff
-can select SENSE or HALO after login. HALO uses its locally installed image and
-can [record and extract locally](HALO/README.md#test-a-capture-without-sense)
+copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account (redirects
+to the project Info page at `/about/`). Staff navigation provides dedicated sections
+for **SENSE** (`/sense/`, live Sensor Dashboard `/dashboard/`, Data & Export `/data-browser/`,
+collection & graceful poweroff), **HALO** (`/halo/`, live Sensor Dashboard `/halo/dashboard/`,
+Data & Export `/halo/data/`, recording & graceful poweroff), **Campaigns & Participants**
+(`/campaign/`), and **Map** (`/map/`), along with a top-right light/dark theme toggle.
+HALO uses its locally installed image and can [record and extract locally](HALO/README.md#test-a-capture-without-sense)
 while SENSE is offline.
 
 The architecture and installation notes below describe the original standalone

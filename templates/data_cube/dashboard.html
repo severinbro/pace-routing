@@ -5,6 +5,16 @@
 <script src="{% static 'js/chart.umd.js' %}"></script>
 
 <div class="container-fluid p-0">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="bi bi-cpu"></i> SENSE Sensor Dashboard</h2>
+            <small class="text-muted">Live environmental telemetry</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'sense_home' %}" class="btn btn-pace-outline btn-sm"><i class="bi bi-sliders"></i> SENSE Control</a>
+            <a href="{% url 'data_browser' %}" class="btn btn-pace-sky btn-sm"><i class="bi bi-database"></i> Data &amp; Export</a>
+        </div>
+    </div>
     <div class="row g-3 mb-3">
         
         <div class="col-md-4">
