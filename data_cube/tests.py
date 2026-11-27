@@ -30,7 +30,7 @@ class PlatformNavigationTests(TestCase):
         self.assertContains(sense_resp, reverse('dashboard_tab'))
         self.assertContains(sense_resp, reverse('data_browser'))
         self.assertNotContains(sense_resp, reverse('create_user'))
-        self.assertNotContains(sense_resp, reverse('surveys_tab'))
+        self.assertNotContains(sense_resp, 'href="/"')
         self.assertContains(self.client.get(reverse('halo_home')), 'Recording control')
         self.assertContains(self.client.get(reverse('halo_dashboard')), 'HALO Sensor Dashboard')
         self.assertContains(self.client.get(reverse('campaign_hub')), reverse('create_user'))
