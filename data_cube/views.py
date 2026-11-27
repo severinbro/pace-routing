@@ -100,10 +100,42 @@ def _read_mbtiles_metadata(mbtiles_path: Path) -> dict:
         return {}
 
 
-# --- ADMIN-ONLY: MAP ---
-@staff_member_required(login_url='admin_login')
+def _load_redis_json(key: str, default):
+    try:
+        raw = r.get(key)
+        if raw:
+            return json.loads(raw.decode('utf-8'))
+    except (redis.RedisError, ValueError, UnicodeDecodeError):
+        pass
+    return default
+
+
+def _get_live_gnss_fix() -> dict:
+    """Return latest available GNSS fix (phone preferred, fallback sensor)."""
+    phone = _load_redis_json('gnss_phone', None)
+    if isinstance(phone, dict) and (phone.get('lat') or phone.get('lon')):
+        return {
+            'lat': float(phone.get('lat', 0.0)),
+            'lon': float(phone.get('lon', 0.0)),
+            'accuracy': float(phone.get('accuracy', 0.0) or 0.0),
+        }
+    snap = _load_redis_json('sensor_measurements', None)
+    if isinstance(snap, dict):
+        lat = float(snap.get('lat') or snap.get('sensor_lat') or 0.0)
+        lon = float(snap.get('lon') or snap.get('sensor_lon') or 0.0)
+        if lat or lon:
+            return {
+                'lat': lat,
+                'lon': lon,
+                'accuracy': float(snap.get('accuracy', 0.0) or 0.0),
+            }
+    return {'lat': 0.0, 'lon': 0.0, 'accuracy': 0.0}
+
+
+# --- MAP (authenticated participants & admins) ---
+@login_required(login_url='admin_login')
 def map_tab(request):
-    """Renders the offline MBTiles Leaflet map."""
+    """Renders the offline MBTiles Leaflet map with campaign stops."""
     mbtiles_path = Path(settings.OFFLINE_MBTILES_PATH)
     meta = _read_mbtiles_metadata(mbtiles_path)
     center_lat, center_lon, default_zoom = 49.9929, 8.2473, 13
@@ -135,7 +167,7 @@ def map_tab(request):
     })
 
 
-@staff_member_required(login_url='admin_login')
+@login_required(login_url='admin_login')
 def offline_tile(request, z: int, x: int, y: int):
     """Serves a single raster map tile directly from a local MBTiles SQLite file."""
     if z < 0 or z > 22 or x < 0 or y < 0:
@@ -165,6 +197,130 @@ def offline_tile(request, z: int, x: int, y: int):
     response = HttpResponse(blob, content_type=content_type)
     response['Cache-Control'] = 'public, max-age=86400'
     return response
+
+
+@login_required(login_url='admin_login')
+def api_map_data(request):
+    """Returns campaign stop pins and live group GNSS position for participants & admins."""
+    from data_cube.models import EnvironmentSurvey
+
+    try:
+        state = campaign_state()
+    except redis.RedisError:
+        state = {'active': False, 'total_stops': 0, 'current_stop': 0, 'collect_mode': False, 'submitted_stops': []}
+
+    planned = _load_redis_json('campaign:planned_stops', [])
+    recorded = _load_redis_json('campaign:recorded_stops', {})
+    stops_by_num = {}
+
+    if isinstance(planned, list):
+        for item in planned:
+            try:
+                num = int(item['stop'])
+                lat = float(item['lat'])
+                lon = float(item['lon'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            stops_by_num[num] = {
+                'stop': num,
+                'lat': lat,
+                'lon': lon,
+                'label': str(item.get('label') or f'Stop {num}'),
+                'planned': True,
+            }
+
+    if isinstance(recorded, dict):
+        for key, item in recorded.items():
+            try:
+                num = int(key)
+                lat = float(item['lat'])
+                lon = float(item['lon'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if num not in stops_by_num and (lat or lon):
+                stops_by_num[num] = {
+                    'stop': num,
+                    'lat': lat,
+                    'lon': lon,
+                    'label': f'Stop {num}',
+                    'planned': False,
+                }
+
+    # Fallback: include recent survey stops that have a GNSS snapshot if not already present.
+    if state['active'] and state['submitted_stops']:
+        surveys = (
+            EnvironmentSurvey.objects
+            .filter(campaign_stop__in=state['submitted_stops'], gnss_snapshot__isnull=False)
+            .select_related('gnss_snapshot')
+            .order_by('-id')
+        )
+        for srv in surveys:
+            num = srv.campaign_stop
+            if num and num not in stops_by_num:
+                lat = float(srv.gnss_snapshot.latitude)
+                lon = float(srv.gnss_snapshot.longitude)
+                if lat or lon:
+                    stops_by_num[num] = {
+                        'stop': num,
+                        'lat': lat,
+                        'lon': lon,
+                        'label': f'Stop {num}',
+                        'planned': False,
+                    }
+
+    submitted_set = set(state.get('submitted_stops', []))
+    current_stop = state.get('current_stop', 0)
+    stops = []
+    for num in sorted(stops_by_num):
+        entry = dict(stops_by_num[num])
+        if state['active']:
+            if num in submitted_set or (current_stop > 0 and num < current_stop):
+                entry['status'] = 'completed'
+            elif num == current_stop:
+                entry['status'] = 'current'
+            else:
+                entry['status'] = 'upcoming'
+        else:
+            entry['status'] = 'upcoming'
+        stops.append(entry)
+
+    return JsonResponse({
+        'campaign': {
+            'active': state['active'],
+            'total_stops': state['total_stops'],
+            'current_stop': current_stop,
+            'submitted_stops': sorted(submitted_set),
+        },
+        'live_fix': _get_live_gnss_fix(),
+        'stops': stops,
+    })
+
+
+@staff_member_required(login_url='admin_login')
+def campaign_stops(request):
+    """Admin-only endpoint to read or replace planned campaign route stop coordinates."""
+    if request.method == 'GET':
+        return JsonResponse({'stops': _load_redis_json('campaign:planned_stops', [])})
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+        raw_stops = payload.get('stops', [])
+        if not isinstance(raw_stops, list) or len(raw_stops) > 50:
+            return JsonResponse({'error': 'stops must be a list of up to 50 items'}, status=400)
+        cleaned = []
+        for idx, item in enumerate(raw_stops, start=1):
+            lat = float(item['lat'])
+            lon = float(item['lon'])
+            if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+                return JsonResponse({'error': 'Invalid coordinates'}, status=400)
+            label = str(item.get('label') or f'Stop {idx}').strip()[:80]
+            cleaned.append({'stop': idx, 'lat': round(lat, 6), 'lon': round(lon, 6), 'label': label})
+    except (ValueError, KeyError, TypeError, UnicodeDecodeError):
+        return JsonResponse({'error': 'Invalid JSON payload'}, status=400)
+
+    r.set('campaign:planned_stops', json.dumps(cleaned))
+    return JsonResponse({'stops': cleaned})
 
 # --- ADMIN-ONLY: MEASUREMENT DASHBOARD ---
 @staff_member_required(login_url='admin_login')
@@ -513,7 +669,7 @@ def campaign_start(request):
     r.set('campaign:active', '1')
     r.set('campaign:total_stops', total_stops)
     r.set('campaign:current_stop', 0)  # no stop unlocked yet
-    r.delete('campaign:submitted_stops')  # clear submitted-stop tracking
+    r.delete('campaign:submitted_stops', 'campaign:recorded_stops')  # clear prior tracking
     r.set('collect_mode', '1')  # start collecting sensor data
     r.set('campaign:collect_mode', '1')  # mirror for campaign hub display
     return JsonResponse(campaign_state())
@@ -524,7 +680,7 @@ def campaign_abort(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     r.delete('campaign:active', 'campaign:total_stops', 'campaign:current_stop',
-             'campaign:collect_mode', 'campaign:submitted_stops', 'collect_mode')
+             'campaign:collect_mode', 'campaign:submitted_stops', 'campaign:recorded_stops', 'collect_mode')
     return JsonResponse({'active': False})
 
 @staff_member_required(login_url='admin_login')
@@ -552,6 +708,13 @@ def campaign_unlock_stop(request):
     if next_stop > state['total_stops']:
         return JsonResponse({'error': 'All stops already unlocked'}, status=400)
     r.set('campaign:current_stop', next_stop)
+    fix = _get_live_gnss_fix()
+    if fix['lat'] or fix['lon']:
+        recorded = _load_redis_json('campaign:recorded_stops', {})
+        if not isinstance(recorded, dict):
+            recorded = {}
+        recorded[str(next_stop)] = {'lat': fix['lat'], 'lon': fix['lon']}
+        r.set('campaign:recorded_stops', json.dumps(recorded))
     return JsonResponse(campaign_state())
 
 @staff_member_required(login_url='admin_login')

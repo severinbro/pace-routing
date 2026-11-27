@@ -1,5 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    .pace-stop-pin {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 3px solid #2B2D6B;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 0.85rem;
+        line-height: 1;
+        font-family: 'Nunito', sans-serif;
+    }
+    .pace-stop-pin-upcoming  { background: #FFD93D; color: #1A1E38; }
+    .pace-stop-pin-current   { background: #FF6B6B; color: #FFFFFF; box-shadow: 0 0 0 4px rgba(255, 107, 107, 0.35); }
+    .pace-stop-pin-completed { background: #4ECDC4; color: #1A1E38; }
+    .pace-legend-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--pace-border);
+        vertical-align: middle;
+        margin-right: 4px;
+    }
+</style>
+
 {% if not mbtiles_available %}
 <div class="alert alert-warning pace-card p-3 mb-3" role="status">
     No offline map archive found (<code>SENSE/data/maps/offline.mbtiles</code>). Run
@@ -7,12 +35,49 @@
     on SENSE while online to generate a lightweight offline MBTiles map.
 </div>
 {% endif %}
+
+<div class="pace-card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center flex-wrap gap-3">
+            <span id="map-campaign-badge" class="pace-badge" style="background: var(--pace-card); color: var(--pace-ink);">
+                <i class="bi bi-signpost-split"></i> <span id="map-campaign-text">Checking campaign…</span>
+            </span>
+            <div class="small text-muted d-flex flex-wrap gap-3 align-items-center">
+                <span><span class="pace-legend-dot" style="background: #FFD93D;"></span>Upcoming</span>
+                <span><span class="pace-legend-dot" style="background: #FF6B6B;"></span>Active Stop</span>
+                <span><span class="pace-legend-dot" style="background: #4ECDC4;"></span>Completed</span>
+                <span><span class="pace-legend-dot" style="background: #2B2D6B;"></span>Live Position</span>
+            </div>
+        </div>
+        {% if request.user.is_staff %}
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <button type="button" id="btn-edit-stops" class="btn btn-pace-outline btn-sm">
+                <i class="bi bi-geo-alt-fill"></i> Edit Route Stops
+            </button>
+            <button type="button" id="btn-undo-stop" class="btn btn-pace-outline btn-sm" disabled>
+                <i class="bi bi-arrow-counterclockwise"></i> Undo last
+            </button>
+            <button type="button" id="btn-clear-stops" class="btn btn-outline-danger btn-sm" disabled>
+                <i class="bi bi-trash"></i> Clear stops
+            </button>
+            <small id="map-editor-status" class="text-muted fw-semibold"></small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
 <div class="pace-card overflow-hidden">
-    <div id="map" style="height: 80vh; border-radius: 17px;"></div>
+    <div id="map" style="height: 75vh; border-radius: 17px;"></div>
 </div>
 
 <script>
-    // 1. Initialize the Map (same-origin HTTPS MBTiles served by pace-web)
+(function () {
+    const isStaff = {{ request.user.is_staff|yesno:"true,false" }};
+    const csrfToken = document.getElementById('csrf-token').value;
+    const surveyUrl = "{% url 'surveys_tab' %}";
+    const mapDataUrl = "{% url 'api_map_data' %}";
+    const stopsEndpoint = "{% url 'campaign_stops' %}";
+
     var map = L.map('map').setView([{{ center_lat }}, {{ center_lon }}], {{ default_zoom }});
 
     L.tileLayer('/tiles/{z}/{x}/{y}.png', {
@@ -22,9 +87,8 @@
         attribution: '{{ mbtiles_name|escapejs }} (Offline MBTiles)'
     }).addTo(map);
 
-    // 2. Create the flat dot vector marker (pace palette)
     var userMarker = L.circleMarker([{{ center_lat }}, {{ center_lon }}], {
-        radius: 10,
+        radius: 9,
         fillColor: "#FF6B6B",
         fillOpacity: 1,
         color: "#2B2D6B",
@@ -32,23 +96,179 @@
         opacity: 1
     }).addTo(map).bindPopup("Waiting for GPS...");
 
-    // 3. The Dedicated Map Fetch Function
-    function updateLiveMap() {
-        fetch('/api/latest-sensors/')
-            .then(res => res.json())
-            .then(data => {
-                if (data.lat !== 0 && data.lon !== 0) {
-                    const newLatLng = [data.lat, data.lon];
-                    userMarker.setLatLng(newLatLng);
-                    userMarker.setPopupContent(`<b>Live Fix</b><br>Accuracy: ±${(data.accuracy || 0).toFixed(1)}m`);
-                    map.panTo(newLatLng);
-                }
-            })
-            .catch(err => console.error("Map fetch error:", err));
+    var stopLayer = L.layerGroup().addTo(map);
+    var routeLine = null;
+    var hasPannedManually = false;
+    var hasFirstFix = false;
+    var editMode = false;
+    var plannedStops = [];
+
+    map.on('dragstart', function () {
+        hasPannedManually = true;
+    });
+
+    function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+        });
     }
 
-    // 4. Ping the API every 1 second (1000 milliseconds)
-    setInterval(updateLiveMap, 1000);
-    updateLiveMap();
+    function statusLabel(status) {
+        if (status === 'current') return 'Active Stop — Survey Open';
+        if (status === 'completed') return 'Completed';
+        return 'Upcoming';
+    }
+
+    function renderStops(stops) {
+        stopLayer.clearLayers();
+        if (routeLine) {
+            map.removeLayer(routeLine);
+            routeLine = null;
+        }
+        if (!Array.isArray(stops) || !stops.length) return;
+
+        var latlngs = stops.map(function (s) { return [s.lat, s.lon]; });
+        if (latlngs.length >= 2) {
+            routeLine = L.polyline(latlngs, {
+                color: '#2B2D6B',
+                weight: 3,
+                dashArray: '6, 8',
+                opacity: 0.75
+            }).addTo(stopLayer);
+        }
+
+        stops.forEach(function (s) {
+            var cls = 'pace-stop-pin-' + (s.status || 'upcoming');
+            var icon = L.divIcon({
+                className: '',
+                html: '<div class="pace-stop-pin ' + cls + '">' + s.stop + '</div>',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15],
+                popupAnchor: [0, -14]
+            });
+            var popup = '<div><strong>' + escapeHtml(s.label || ('Stop ' + s.stop)) + '</strong>' +
+                '<div class="small text-muted">' + statusLabel(s.status) + '</div>';
+            if (s.status === 'current') {
+                popup += '<div class="mt-2"><a href="' + surveyUrl + '" class="btn btn-pace-primary btn-sm">Open Survey</a></div>';
+            }
+            popup += '</div>';
+            L.marker([s.lat, s.lon], { icon: icon }).addTo(stopLayer).bindPopup(popup);
+        });
+    }
+
+    function updateCampaignBadge(campaign, stopCount) {
+        var badge = document.getElementById('map-campaign-badge');
+        var textEl = document.getElementById('map-campaign-text');
+        if (campaign && campaign.active) {
+            badge.style.background = '#4ECDC4';
+            badge.style.color = '#1A1E38';
+            textEl.textContent = 'Active Campaign · Stop ' + (campaign.current_stop || 0) + ' / ' + (campaign.total_stops || 0);
+        } else {
+            badge.style.background = 'var(--pace-card)';
+            badge.style.color = 'var(--pace-ink)';
+            textEl.textContent = stopCount > 0 ? ('No active campaign (' + stopCount + ' stops planned)') : 'No active campaign';
+        }
+    }
+
+    function syncEditorButtons() {
+        if (!isStaff) return;
+        document.getElementById('btn-undo-stop').disabled = plannedStops.length === 0;
+        document.getElementById('btn-clear-stops').disabled = plannedStops.length === 0;
+    }
+
+    function refreshMap() {
+        fetch(mapDataUrl, { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                var fix = data.live_fix || {};
+                if (fix.lat && fix.lon) {
+                    var newLatLng = [fix.lat, fix.lon];
+                    userMarker.setLatLng(newLatLng);
+                    userMarker.setPopupContent('<b>Live Position</b><br>Accuracy: ±' + Number(fix.accuracy || 0).toFixed(1) + ' m');
+                    if (!hasFirstFix || !hasPannedManually) {
+                        map.panTo(newLatLng);
+                        hasFirstFix = true;
+                    }
+                }
+                var stops = data.stops || [];
+                plannedStops = stops.filter(function (s) { return s.planned; }).map(function (s) {
+                    return { lat: s.lat, lon: s.lon, label: s.label };
+                });
+                syncEditorButtons();
+                renderStops(stops);
+                updateCampaignBadge(data.campaign, stops.length);
+            })
+            .catch(function (err) { console.error("Map fetch error:", err); });
+    }
+
+    if (isStaff) {
+        var editBtn = document.getElementById('btn-edit-stops');
+        var undoBtn = document.getElementById('btn-undo-stop');
+        var clearBtn = document.getElementById('btn-clear-stops');
+        var statusEl = document.getElementById('map-editor-status');
+
+        function saveStops(nextStops, msg) {
+            statusEl.textContent = 'Saving…';
+            fetch(stopsEndpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ stops: nextStops })
+            })
+            .then(function (res) {
+                if (!res.ok) throw Error('Save failed');
+                return res.json();
+            })
+            .then(function (out) {
+                plannedStops = out.stops || [];
+                syncEditorButtons();
+                statusEl.textContent = msg || ('Saved ' + plannedStops.length + ' stop(s)');
+                refreshMap();
+            })
+            .catch(function (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+            });
+        }
+
+        editBtn.addEventListener('click', function () {
+            editMode = !editMode;
+            editBtn.classList.toggle('btn-pace-primary', editMode);
+            editBtn.classList.toggle('btn-pace-outline', !editMode);
+            editBtn.innerHTML = editMode
+                ? '<i class="bi bi-check2-circle"></i> Done Editing'
+                : '<i class="bi bi-geo-alt-fill"></i> Edit Route Stops';
+            map.getContainer().style.cursor = editMode ? 'crosshair' : '';
+            statusEl.textContent = editMode ? 'Tap map to add a stop' : '';
+        });
+
+        undoBtn.addEventListener('click', function () {
+            if (!plannedStops.length) return;
+            var next = plannedStops.slice(0, -1);
+            saveStops(next, 'Removed last stop');
+        });
+
+        clearBtn.addEventListener('click', function () {
+            if (!plannedStops.length) return;
+            if (!confirm('Clear all planned route stops?')) return;
+            saveStops([], 'Cleared stops');
+        });
+
+        map.on('click', function (e) {
+            if (!editMode) return;
+            var next = plannedStops.concat([{
+                lat: Number(e.latlng.lat.toFixed(6)),
+                lon: Number(e.latlng.lng.toFixed(6)),
+                label: 'Stop ' + (plannedStops.length + 1)
+            }]);
+            saveStops(next, 'Added Stop ' + next.length);
+        });
+    }
+
+    refreshMap();
+    setInterval(refreshMap, 2500);
+})();
 </script>
 {% endblock %}

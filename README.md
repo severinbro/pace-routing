@@ -36,11 +36,11 @@ for **SENSE** (SENSE Controller `/sense/` with recording control, live CPU/RAM/S
 metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
 **HALO** (HALO Controller `/halo/` with recording control, live CPU/RAM/Storage/temperature metrics &
 graceful poweroff, live Sensor Dashboard `/halo/dashboard/`, and Data & Export `/halo/data/`),
-**Campaigns & Participants**
-(`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`, backed by a lightweight
-offline MBTiles SQLite archive at `SENSE/data/maps/offline.mbtiles` served directly via
-`/tiles/{z}/{x}/{y}.png` — generate with `python3 scripts/build_mbtiles.py`), along with a
-top-right light/dark theme toggle.
+**Campaigns & Participants** (`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`,
+accessible to both staff and participants — showing campaign stops, status, and live position,
+with admin route-stop placement, backed by a lightweight offline MBTiles SQLite archive at
+`SENSE/data/maps/offline.mbtiles` served directly via `/tiles/{z}/{x}/{y}.png` — generate with
+`python3 scripts/build_mbtiles.py`), along with a top-right light/dark theme toggle.
 HALO uses its locally installed image and can [record and extract locally](HALO/README.md#test-a-capture-without-sense)
 while SENSE is offline.
 

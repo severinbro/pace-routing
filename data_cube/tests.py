@@ -59,6 +59,15 @@ class PlatformNavigationTests(TestCase):
         about_resp = self.client.get(reverse('about'))
         self.assertNotContains(about_resp, reverse('campaign_hub'))
         self.assertContains(about_resp, reverse('surveys_tab'))
+        self.assertContains(about_resp, reverse('map_tab'))
+        map_resp = self.client.get(reverse('map_tab'))
+        self.assertEqual(map_resp.status_code, 200)
+        self.assertNotContains(map_resp, 'btn-edit-stops')
+        self.assertEqual(self.client.get(reverse('api_map_data')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('offline_tile', args=[14, 0, 0])).status_code, 204)
+        stop_resp = self.client.post(reverse('campaign_stops'), data=json.dumps({'stops': []}), content_type='application/json')
+        self.assertEqual(stop_resp.status_code, 302)
+        self.assertIn('/login/', stop_resp['Location'])
 
     def test_halo_data_browser_and_exports(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -183,3 +192,45 @@ class PlatformNavigationTests(TestCase):
         self.assertContains(good, 'was created')
         created = User.objects.get(username='walker01')
         self.assertFalse(created.is_staff)
+
+    def test_campaign_stops_and_map_data(self):
+        from data_cube.views import r
+        keys = (
+            'campaign:planned_stops', 'campaign:recorded_stops',
+            'campaign:active', 'campaign:total_stops', 'campaign:current_stop',
+            'campaign:collect_mode', 'campaign:submitted_stops', 'collect_mode',
+        )
+        orig = {k: r.get(k) for k in keys}
+        try:
+            self.client.force_login(self.staff)
+            save_resp = self.client.post(
+                reverse('campaign_stops'),
+                data=json.dumps({
+                    'stops': [
+                        {'lat': 49.9929, 'lon': 8.2473, 'label': 'Start Dom'},
+                        {'lat': 49.9985, 'lon': 8.2711, 'label': 'Rheinpromenade'},
+                    ]
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(save_resp.status_code, 200)
+            self.assertEqual(len(save_resp.json()['stops']), 2)
+            self.assertEqual(self.client.post(reverse('campaign_start'), {'total_stops': '2'}).status_code, 200)
+            self.assertEqual(self.client.post(reverse('campaign_unlock_stop')).status_code, 200)
+
+            self.client.force_login(self.participant)
+            map_data = self.client.get(reverse('api_map_data'))
+            self.assertEqual(map_data.status_code, 200)
+            payload = map_data.json()
+            self.assertTrue(payload['campaign']['active'])
+            self.assertEqual(payload['campaign']['current_stop'], 1)
+            self.assertEqual(len(payload['stops']), 2)
+            self.assertEqual(payload['stops'][0]['status'], 'current')
+            self.assertEqual(payload['stops'][0]['label'], 'Start Dom')
+            self.assertEqual(payload['stops'][1]['status'], 'upcoming')
+        finally:
+            for k, val in orig.items():
+                if val is None:
+                    r.delete(k)
+                else:
+                    r.set(k, val)
