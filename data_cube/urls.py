@@ -31,7 +31,7 @@ urlpatterns = [
     path('campaign/poweroff/', views.campaign_poweroff, name='campaign_poweroff'),
 
     # --- AUTH & LANDING ---
-    # Custom login view redirects admin -> admin_home, non-admin -> surveys_tab
+    # Successful sign-ins land on the project info page.
     path('login/', views.RoleLoginView.as_view(), name='admin_login'),
     path('logout/', auth_views.LogoutView.as_view(), name='admin_logout'),
     path('admin-home/', views.admin_home, name='admin_home'),

@@ -2,7 +2,6 @@
 {% load static %}
 
 {% block content %}
-<script src="{% static 'js/chart.umd.js' %}"></script>
 
 <div class="container-fluid px-2 px-md-4 py-3">
     <div class="text-center mb-4">
@@ -17,7 +16,7 @@
     </div>
     {% if not hardware_available %}
     <div class="alert alert-warning pace-card p-3 mb-3" role="status">
-        The legacy SENSE sensor worker and offline map tiles are not configured on this Pi yet. Survey and admin pages are available; live sensor readings may be empty.
+        The legacy SENSE sensor worker is unavailable. Live sensor readings may be empty.
     </div>
     {% endif %}
     <div class="row g-3 mb-3">

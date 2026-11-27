@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements FIRST so Docker detects changes here
-COPY requirements.txt /code/
+COPY requirements.txt requirements-web.txt /code/
 
 # Install Python dependencies with verbose output to catch errors
 RUN pip install --upgrade pip && \

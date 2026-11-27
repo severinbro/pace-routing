@@ -12,19 +12,22 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import secrets
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+DEBUG = os.environ.get('PACE_DEBUG', 'false').lower() == 'true'
+SECRET_KEY = os.environ.get('PACE_DJANGO_SECRET_KEY', '').strip()
+if not SECRET_KEY or SECRET_KEY == 'CHANGE_ME_DJANGO_SECRET_KEY':
+    if not DEBUG:
+        raise ImproperlyConfigured('Set PACE_DJANGO_SECRET_KEY to a secret value.')
+    SECRET_KEY = secrets.token_urlsafe(50)
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('PACE_DJANGO_SECRET_KEY', 'django-insecure-g=ojz27zc65x09d2+fn)zc%zt(7%r)vs(_2!=@v&n=e8klatjy')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('PACE_DEBUG', 'true').lower() == 'true'
+PACE_REDIS_HOST = os.environ.get('PACE_REDIS_HOST', 'redis')
 
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get('PACE_ALLOWED_HOSTS', '*').split(',') if host.strip()]
 

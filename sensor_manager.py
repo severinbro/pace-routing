@@ -114,7 +114,7 @@ def update_gps_phone():
         print(f"GPS read error (Redis/phone): {e}")
 
 def update_gps_sensor():
-    """Reads GNSS data directly from the SAM-M10Q sensor over I2C Bus 2."""
+    """Reads GNSS data directly from the SAM-M10Q sensor over I2C Bus 1."""
     global gps_sensor
     buffer = ""
     try:

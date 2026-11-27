@@ -17,7 +17,6 @@
     <link rel="stylesheet" href="{% static 'css/leaflet.css' %}">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/pace.css' %}">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
     <script src="{% static 'js/leaflet.js' %}"></script>
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
@@ -81,8 +80,6 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
-    <script src="{% static 'js/leaflet.js' %}"></script>
     <script>
     (function () {
         function applyChartTheme(theme) {
@@ -129,7 +126,7 @@
 
     <!-- Smartphone GNSS Pusher: streams the admin phone's geolocation to the RPi5 -->
     <!-- Only runs for authenticated admin (is_staff) users so non-admin phones don't interfere -->
-    {% if request.user.is_authenticated and request.user.is_staff and request.resolver_match.url_name != 'halo_home' and request.resolver_match.url_name != 'admin_home' %}
+    {% if request.user.is_authenticated and request.user.is_staff and request.resolver_match.url_name != 'halo_home' %}
     <script>
     (function () {
         if (!navigator.geolocation) {

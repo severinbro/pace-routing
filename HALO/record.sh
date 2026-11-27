@@ -22,5 +22,5 @@ if ! flock -n 9; then
   exit 1
 fi
 
-sudo docker compose up -d redis extractor uploader
-sudo docker compose run --rm capture once "$duration"
+sudo docker compose up -d --no-build --pull never redis extractor uploader
+sudo docker compose run --rm --no-deps --pull never capture once "$duration"

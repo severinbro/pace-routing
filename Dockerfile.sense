@@ -2,8 +2,9 @@ FROM python:3.11-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends dbus && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir 'Django>=5.2,<5.3' 'gunicorn>=21,<24' 'whitenoise>=6,<7' 'redis>=5,<7' 'psycopg2-binary>=2.9,<3' 'numpy>=1.26,<3' 'pandas>=2.2,<3'
+COPY requirements-web.txt /app/
+RUN pip install --no-cache-dir -r requirements-web.txt
 COPY . /app/
-RUN python manage.py collectstatic --noinput
+RUN PACE_DEBUG=true python manage.py collectstatic --noinput
 EXPOSE 8000
 CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn pace.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 120"]

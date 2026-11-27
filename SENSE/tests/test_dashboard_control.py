@@ -2,12 +2,10 @@
 import importlib.util
 import json
 from pathlib import Path
-import secrets
 import sys
 import tempfile
-import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'receiver'))
@@ -25,22 +23,29 @@ controller = load('halo_controller', ROOT.parent / 'HALO/control/controller.py')
 
 
 class DashboardControlTests(unittest.TestCase):
-    def test_signed_login_session_and_csrf(self):
+    def test_internal_status_requires_token_and_old_ui_is_gone(self):
         with tempfile.TemporaryDirectory() as tmp:
-            auth = Path(tmp) / 'auth.json'
-            salt = secrets.token_bytes(16)
-            import hashlib
-            auth.write_text(json.dumps({'salt': salt.hex(),
-                'password_hash': hashlib.pbkdf2_hmac('sha256', b'password', salt, 300000).hex(),
-                'secret': secrets.token_bytes(32).hex()}))
-            with patch.object(dashboard, 'AUTH', auth):
-                self.assertTrue(dashboard.password_valid('password'))
-                self.assertFalse(dashboard.password_valid('wrong'))
-                value = dashboard.signed_session('a' * 32, int(time.time() + 60))
-                self.assertEqual(dashboard.parse_session(value), 'a' * 32)
-                self.assertIsNone(dashboard.parse_session(value[:-1] + '0'))
-                self.assertIsNone(dashboard.parse_session(dashboard.signed_session('a' * 32, 1)))
-                self.assertNotEqual(dashboard.csrf_token('a' * 32), dashboard.csrf_token('b' * 32))
+            token_file = Path(tmp) / 'internal.token'
+            token_file.write_text('test-token')
+            handler = object.__new__(dashboard.Handler)
+            handler.headers = {}
+            handler.respond = Mock()
+            handler.path = '/internal/status'
+            with patch.object(dashboard, 'INTERNAL_TOKEN_FILE', token_file), \
+                    patch.object(dashboard, 'status_payload', return_value={'halo': {}}) as status:
+                handler.do_GET()
+                handler.respond.assert_called_once_with(403, {'error': 'Internal access denied'})
+                status.assert_not_called()
+                handler.respond.reset_mock()
+
+                handler.headers['X-SENSE-Internal-Token'] = 'test-token'
+                handler.do_GET()
+                handler.respond.assert_called_once_with(200, {'halo': {}})
+                handler.respond.reset_mock()
+
+                handler.path = '/ui/'
+                handler.do_GET()
+                handler.respond.assert_called_once_with(404, {'error': 'Not found'})
 
     def test_stale_recording_reports_failure(self):
         with tempfile.TemporaryDirectory() as tmp:

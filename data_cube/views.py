@@ -5,16 +5,19 @@ from django.contrib.auth.views import LoginView
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 from django.conf import settings
 import redis, json, subprocess, logging, os, sqlite3, shutil, time
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 
 logger = logging.getLogger(__name__)
 
 # Connect to Redis
-r = redis.Redis(host='redis', port=6379, db=0)
+r = redis.Redis(host=settings.PACE_REDIS_HOST, port=6379, db=0,
+                socket_connect_timeout=1, socket_timeout=1)
 
 
 # --- CAMPAIGN STATE HELPERS (stored in Redis) ---
@@ -49,7 +52,7 @@ def campaign_state():
 
 # --- CUSTOM LOGIN (role-based redirect) ---
 class RoleLoginView(LoginView):
-    """Redirects admin users to admin_home, non-admin users to surveys_tab."""
+    """Rate-limits sign-in attempts and redirects successful logins to the info page."""
     template_name = 'data_cube/login.html'
 
     def _attempt_key(self):
@@ -92,7 +95,7 @@ def _read_mbtiles_metadata(mbtiles_path: Path) -> dict:
     if not mbtiles_path.is_file():
         return {}
     try:
-        with sqlite3.connect(f'file:{mbtiles_path}?mode=ro', uri=True) as conn:
+        with closing(sqlite3.connect(f'{mbtiles_path.absolute().as_uri()}?mode=ro&immutable=1', uri=True)) as conn:
             rows = conn.execute('SELECT name, value FROM metadata').fetchall()
         return {str(k): str(v) for k, v in rows}
     except sqlite3.Error as exc:
@@ -177,7 +180,7 @@ def offline_tile(request, z: int, x: int, y: int):
         return HttpResponse(status=204)
     tms_y = (1 << z) - 1 - y
     try:
-        with sqlite3.connect(f'file:{mbtiles_path}?mode=ro', uri=True) as conn:
+        with closing(sqlite3.connect(f'{mbtiles_path.absolute().as_uri()}?mode=ro&immutable=1', uri=True)) as conn:
             row = conn.execute(
                 'SELECT tile_data FROM tiles WHERE zoom_level = ? AND tile_column = ? AND tile_row = ?',
                 (z, x, tms_y),
@@ -445,6 +448,26 @@ from data_cube.exports import (
 )
 
 
+def _stream_temp_file(path, filename, content_type):
+    def close_and_remove():
+        try:
+            if file is not None:
+                file.close()
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+    file = None
+    try:
+        file = open(path, 'rb')
+        response = FileResponse(file, as_attachment=True, filename=filename(),
+                                content_type=content_type)
+        response._resource_closers.append(close_and_remove)
+        return response
+    except Exception:
+        close_and_remove()
+        raise
+
+
 @staff_member_required(login_url='admin_login')
 def export_csv(request):
     """Joins the 7 sensor tables on id and streams the result as a .csv file.
@@ -455,19 +478,7 @@ def export_csv(request):
     start = request.GET.get('start') or None
     end = request.GET.get('end') or None
     path = write_sensor_csv(start=start, end=end)
-    try:
-        response = FileResponse(
-            open(path, 'rb'),
-            as_attachment=True,
-            filename=export_filename(),
-            content_type='text/csv',
-        )
-        response._resource_closers.append(lambda: os.remove(path))
-        return response
-    except Exception:
-        if os.path.exists(path):
-            os.remove(path)
-        raise
+    return _stream_temp_file(path, export_filename, 'text/csv')
 
 # --- ADMIN-ONLY: SURVEY JSON EXPORT ---
 @staff_member_required(login_url='admin_login')
@@ -480,19 +491,7 @@ def export_survey_json(request):
     start = request.GET.get('start') or None
     end = request.GET.get('end') or None
     path = write_survey_json(start=start, end=end)
-    try:
-        response = FileResponse(
-            open(path, 'rb'),
-            as_attachment=True,
-            filename=survey_export_filename(),
-            content_type='application/json',
-        )
-        response._resource_closers.append(lambda: os.remove(path))
-        return response
-    except Exception:
-        if os.path.exists(path):
-            os.remove(path)
-        raise
+    return _stream_temp_file(path, survey_export_filename, 'application/json')
 
 # --- ADMIN-ONLY: WEATHER CSV EXPORT (Open-Meteo, needs internet) ---
 @staff_member_required(login_url='admin_login')
@@ -508,19 +507,7 @@ def export_weather_csv(request):
     start = request.GET.get('start') or None
     end = request.GET.get('end') or None
     path = write_weather_csv(start=start, end=end)
-    try:
-        response = FileResponse(
-            open(path, 'rb'),
-            as_attachment=True,
-            filename=weather_export_filename(),
-            content_type='text/csv',
-        )
-        response._resource_closers.append(lambda: os.remove(path))
-        return response
-    except Exception:
-        if os.path.exists(path):
-            os.remove(path)
-        raise
+    return _stream_temp_file(path, weather_export_filename, 'text/csv')
 
 # --- ADMIN-ONLY: AMENITIES CSV EXPORT (Overpass, needs internet) ---
 @staff_member_required(login_url='admin_login')
@@ -537,19 +524,7 @@ def export_amenities_csv(request):
     start = request.GET.get('start') or None
     end = request.GET.get('end') or None
     path = write_amenities_csv(start=start, end=end)
-    try:
-        response = FileResponse(
-            open(path, 'rb'),
-            as_attachment=True,
-            filename=amenities_export_filename(),
-            content_type='text/csv',
-        )
-        response._resource_closers.append(lambda: os.remove(path))
-        return response
-    except Exception:
-        if os.path.exists(path):
-            os.remove(path)
-        raise
+    return _stream_temp_file(path, amenities_export_filename, 'text/csv')
 
 # --- ADMIN-ONLY: LEGACY LANDING REDIRECT ---
 @staff_member_required(login_url='admin_login')
@@ -568,17 +543,28 @@ def _read_proc_cpu_times():
         return None
 
 
+_cpu_sample_lock = Lock()
+_previous_cpu_times = None
+
+
+def _cpu_percent():
+    global _previous_cpu_times
+    with _cpu_sample_lock:
+        current = _read_proc_cpu_times()
+        previous = _previous_cpu_times
+        if current is None:
+            return None
+        _previous_cpu_times = current
+    if previous is None or current[0] <= previous[0]:
+        return None
+    total_delta = current[0] - previous[0]
+    idle_delta = current[1] - previous[1]
+    return round(max(0.0, min(100.0, 100.0 * (total_delta - idle_delta) / total_delta)), 1)
+
+
 def _sense_system_metrics() -> dict:
     """Collect lightweight host CPU, RAM, disk, and temperature metrics via procfs/stdlib."""
-    cpu_pct = None
-    t1 = _read_proc_cpu_times()
-    if t1 is not None:
-        time.sleep(0.1)
-        t2 = _read_proc_cpu_times()
-        if t2 is not None and t2[0] > t1[0]:
-            total_d = t2[0] - t1[0]
-            idle_d = t2[1] - t1[1]
-            cpu_pct = round(max(0.0, min(100.0, 100.0 * (total_d - idle_d) / total_d)), 1)
+    cpu_pct = _cpu_percent()
 
     mem_total = mem_avail = None
     try:
@@ -652,7 +638,7 @@ def sense_system_status(request):
 @staff_member_required(login_url='admin_login')
 def campaign_hub(request):
     """Renders the campaign management dashboard for admins."""
-    return render(request, 'data_cube/campaign_hub.html', campaign_state())
+    return render(request, 'data_cube/campaign_hub.html', {'campaign': campaign_state()})
 
 @staff_member_required(login_url='admin_login')
 def campaign_start(request):
@@ -919,10 +905,9 @@ def surveys_tab(request):
         if was_last_stop:
             r.delete('campaign:active', 'campaign:total_stops',
                      'campaign:current_stop', 'campaign:collect_mode',
-                     'campaign:submitted_stops', 'collect_mode')
+                     'campaign:submitted_stops', 'campaign:recorded_stops', 'collect_mode')
             # Redirect directly with complete=1 so the thank-you screen shows
             # once; subsequent loads see no active campaign (waiting screen).
-            from django.urls import reverse
             return redirect(reverse('surveys_tab') + '?done=1&complete=1')
 
         return redirect('surveys_tab_done')
@@ -994,6 +979,7 @@ def _capture_gnss_snapshot():
 
 
 # --- API ---
+@staff_member_required(login_url='admin_login')
 def api_latest_sensors(request):
     """Returns the Redis sensor snapshot as JSON for AJAX calls."""
     data = r.get('sensor_measurements')
@@ -1009,7 +995,6 @@ def api_latest_sensors(request):
         "noise": 0
     })
 
-@csrf_exempt
 def api_update_gnss(request):
     """Receives GNSS coordinates from the admin smartphone's browser.
 
@@ -1031,6 +1016,20 @@ def api_update_gnss(request):
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
 
+    if not isinstance(payload, dict):
+        return JsonResponse({'status': 'error', 'message': 'Expected a JSON object'}, status=400)
+
+    clock_time = None
+    utc_iso = payload.get('utc_time')
+    if utc_iso is not None and os.environ.get('PACE_PHONE_CLOCK_SYNC', 'true').lower() == 'true':
+        try:
+            timestamp = datetime.fromisoformat(utc_iso)
+            if timestamp.utcoffset() is None:
+                raise ValueError('Missing time zone')
+            clock_time = timestamp.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        except (TypeError, ValueError, OverflowError):
+            return JsonResponse({'status': 'error', 'message': 'Invalid utc_time'}, status=400)
+
     lat = payload.get('lat')
     lon = payload.get('lon')
     if lat is None or lon is None:
@@ -1044,32 +1043,22 @@ def api_update_gnss(request):
         'altitude_accuracy': float(payload.get('alt_accuracy', 0.0) or 0.0),
         'sats': 0,  # Browser API does not expose satellite count
         'timestamp': payload.get('timestamp', 0),
-        'received_at': __import__('time').time(),
+        'received_at': time.time(),
     }
 
     # Persist the fix for sensor_manager.py to consume
     r.set('gnss_phone', json.dumps(fix))
 
-    # --- Sync the RPi5 system clock if a UTC timestamp is provided ---
-    utc_iso = payload.get('utc_time')
-    if utc_iso and os.environ.get('PACE_PHONE_CLOCK_SYNC', 'true').lower() == 'true':
+    if clock_time is not None:
         try:
-            # Expecting ISO-8601 UTC, e.g. "2026-08-08T14:32:05.123Z"
-            # Strip fractional seconds and trailing 'Z' for the `date` command.
-            clean = utc_iso.replace('Z', '').split('.')[0]
-            # date -s accepts "YYYY-MM-DD HH:MM:SS" UTC when --utc is set
             subprocess.run(
-                ['date', '-u', '-s', clean.replace('T', ' ')],
+                ['date', '-u', '-s', clock_time],
                 check=True,
                 capture_output=True,
                 timeout=2,
             )
-            logger.info(f"System clock synced to {clean} UTC via phone GNSS.")
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"Clock sync failed (CalledProcessError): {e.stderr.decode(errors='ignore')}")
-        except subprocess.TimeoutExpired:
-            logger.warning("Clock sync timed out.")
-        except Exception as e:
-            logger.warning(f"Clock sync failed: {e}")
+            logger.info('System clock synced to %s UTC via phone GNSS.', clock_time)
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.warning('Phone clock sync failed: %s', exc)
 
     return JsonResponse({'status': 'ok'})

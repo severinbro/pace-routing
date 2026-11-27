@@ -75,8 +75,7 @@ normally should not be changed. `CLIP_DURATION_SECONDS` is the fallback for a
 direct `sudo docker compose run --rm capture once`; `record.sh` supplies its own
 duration. Extracted JPEGs rotate 180° by default (`IMAGE_ROTATION=180`).
 The current `FRAME_INTERVAL_SECONDS=1` setting extracts roughly one stereo
-pair per second, not every encoded video frame. Both source videos are kept
-locally until a confirmed upload-and-cleanup path is implemented.
+pair per second, not every encoded video frame. HALO keeps source videos locally until SENSE verifies the transferred processed copy and requests cleanup.
 
 New recordings use Raspberry Pi software camera sync: camera 1/right starts as
 the client, then camera 0/left starts as the server. `capture.json` schema v2
@@ -259,6 +258,12 @@ published.
 
 ## Transfer to SENSE
 
+During capture, the uploader can send sampled JPEG previews and capture
+metadata over HTTPS via `POST /halo-upload/v2/sessions/<SESSION_ID>/frames`.
+The receiver authenticates with the shared Bearer token and limits each v2
+request to 10 MiB and each JPEG to 5 MiB. These previews are separate from the
+verified v1 session archive.
+
 After extraction finishes, HALO marks the session `.transfer_pending`. The
 uploader scans for those sessions and sends each once over HTTPS to the SENSE
 Nginx proxy using `PUT /halo-upload/v1/sessions/<SESSION_ID>`. It authenticates
@@ -289,6 +294,13 @@ queued automatically after successful extraction. Check transfer status with:
 sudo docker compose logs -f uploader
 test -f data/sessions/SESSION_ID/.transfer_complete
 ```
+
+SENSE periodically rechecks committed sessions and requests cleanup through
+its internal HALO control service. HALO compares the verified manifest with
+the local processed copy and validates local checksums before removing
+`video/left.mkv`, `video/right.mkv`, and `frames/` from
+`data/sessions/<SESSION_ID>/`. The session metadata and verification receipts
+remain. An unverified transfer does not trigger cleanup.
 
 Redis remains private to the HALO Compose network. The Pi-to-Pi connection is
 HTTPS through SENSE's published port 18443; the two Docker networks are separate.

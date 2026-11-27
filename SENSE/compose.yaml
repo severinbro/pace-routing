@@ -55,10 +55,9 @@ services:
     container_name: sense-dashboard
     restart: unless-stopped
     environment:
-      HALO_SSH_TARGET: "${HALO_SSH_TARGET:-pacehalo@10.42.10.2}"
+      HALO_SSH_TARGET: "${HALO_SSH_TARGET:?Set HALO_SSH_TARGET in SENSE/.env}"
     volumes:
       - ${PACE_DATA_DIR:-./data}:/data:ro
-      - ./config/dashboard-auth.json:/config/dashboard-auth.json:ro
       - ./config/halo-dashboard-key:/config/halo-dashboard-key:ro
       - ./config/halo-known-hosts:/config/known_hosts:ro
       - ./config/dashboard-internal.token:/config/dashboard-internal.token:ro

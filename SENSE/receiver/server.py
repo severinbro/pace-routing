@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SENSE HALO Protocol v1 Upload Receiver Service.
+"""Receive HALO v1 session archives and v2 live frames on SENSE.
 
 Implements the server endpoint for receiving head-mounted stereo camera and IMU
 sessions from HALO over HTTP/HTTPS:
@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from email.parser import BytesParser
 from email.policy import default as email_default_policy
 import hashlib
+import hmac
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -22,7 +23,7 @@ import shutil
 import tarfile
 import threading
 import time
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.parse import urlparse
 
 try:
@@ -168,7 +169,7 @@ class ReceiverHandler(BaseHTTPRequestHandler):
             self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, "Server authentication not configured")
             return False
 
-        if bearer_token != expected_token:
+        if not hmac.compare_digest(bearer_token.encode('utf-8'), expected_token.encode('utf-8')):
             self.send_error_json(HTTPStatus.UNAUTHORIZED, "Invalid authentication token")
             return False
 

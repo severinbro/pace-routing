@@ -25,6 +25,7 @@ services:
 
   # 3. Offline Map Server
   tileserver:
+    profiles: [legacy-tiles]
     image: overv/openstreetmap-tile-server:latest
     container_name: pace_tiles
     platform: linux/arm64
@@ -52,11 +53,16 @@ services:
              while ! nc -z db 5432; do sleep 0.5; done && 
              echo 'Database is ready, running migrations...' && 
              python manage.py migrate --noinput && 
+             python manage.py collectstatic --noinput &&
              echo 'Starting Gunicorn server...' && 
              gunicorn pace.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 2 --timeout 120 --graceful-timeout 120"
+    environment: &pace-environment
+      PACE_DEBUG: "${PACE_DEBUG:-false}"
+      PACE_DJANGO_SECRET_KEY: "${PACE_DJANGO_SECRET_KEY:-}"
     volumes:
       - .:/code
       - ./data/media:/code/media
+      - ./data/maps:/data/maps:ro
     expose:
       - "8000"
     depends_on:
@@ -112,6 +118,7 @@ services:
     container_name: pace_db_writer
     restart: unless-stopped
     command: python manage.py save_sensor_data
+    environment: *pace-environment
     volumes:
       - .:/code
     depends_on:

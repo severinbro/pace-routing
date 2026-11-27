@@ -1,6 +1,7 @@
 """Integration checks for the SENSE/HALO admin split."""
 import io
 import json
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -49,6 +50,45 @@ class PlatformNavigationTests(TestCase):
         self.assertContains(halo_dash, 'Sensor Dashboard')
         self.assertContains(halo_dash, 'Data &amp; Export')
         self.assertContains(self.client.get(reverse('campaign_hub')), reverse('create_user'))
+
+    def test_sensor_snapshot_requires_staff(self):
+        url = reverse('api_latest_sensors')
+        with patch('data_cube.views.r') as store:
+            self.assertEqual(self.client.get(url).status_code, 302)
+            self.client.force_login(self.participant)
+            self.assertEqual(self.client.get(url).status_code, 302)
+            store.get.assert_not_called()
+            self.client.force_login(self.staff)
+            store.get.return_value = b'{"lat": 49.99}'
+            self.assertEqual(self.client.get(url).json(), {'lat': 49.99})
+
+    def test_gnss_post_checks_csrf_and_validates_clock_before_writing(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.staff)
+        client.get(reverse('about'))
+        token = client.cookies['csrftoken'].value
+        url = reverse('api_update_gnss')
+        payload = {'lat': 49.99, 'lon': 8.25, 'utc_time': '2026-01-01T13:00:00+01:00'}
+        with patch.dict('os.environ', {'PACE_PHONE_CLOCK_SYNC': 'true'}), \
+                patch('data_cube.views.r') as store, patch('data_cube.views.subprocess.run') as clock:
+            self.assertEqual(client.post(url, payload, content_type='application/json').status_code, 403)
+            invalid = dict(payload, utc_time='2026-01-01T12:00:00')
+            self.assertEqual(client.post(url, invalid, content_type='application/json',
+                                         HTTP_X_CSRFTOKEN=token).status_code, 400)
+            store.set.assert_not_called()
+            clock.assert_not_called()
+            response = client.post(url, payload, content_type='application/json', HTTP_X_CSRFTOKEN=token)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(store.set.call_args.args[0], 'gnss_phone')
+            self.assertEqual(clock.call_args.args[0], ['date', '-u', '-s', '2026-01-01 12:00:00'])
+
+    def test_campaign_hub_renders_active_state_before_polling(self):
+        self.client.force_login(self.staff)
+        state = {'active': True, 'current_stop': 2, 'total_stops': 4}
+        with patch('data_cube.views.campaign_state', return_value=state):
+            response = self.client.get(reverse('campaign_hub'))
+        self.assertContains(response, 'id="current-stop">2')
+        self.assertContains(response, 'id="total-stops">4')
 
     def test_participant_cannot_open_halo(self):
         self.client.force_login(self.participant)
@@ -153,7 +193,7 @@ class PlatformNavigationTests(TestCase):
             mbtiles = Path(tmp) / 'offline.mbtiles'
             z, x, y = 13, 4283, 2776
             tms_y = (1 << z) - 1 - y
-            with sqlite3.connect(str(mbtiles)) as conn:
+            with closing(sqlite3.connect(str(mbtiles))) as conn:
                 conn.execute('CREATE TABLE metadata (name TEXT, value TEXT)')
                 conn.execute('INSERT INTO metadata VALUES (?, ?)', ('name', 'Test Mainz'))
                 conn.execute('INSERT INTO metadata VALUES (?, ?)', ('center', '8.2473,49.9929,14'))

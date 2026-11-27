@@ -71,13 +71,13 @@ Visit our website to learn more about the project and participate in our pilot s
 
 ## System Architecture
 
-The platform is split into 8 Docker containers that share a bridged network (`pace_net`):
+The standalone stack has seven default services on a bridged network (`pace_net`):
 
 | # | Container | Image | Role |
 |---|-----------|-------|------|
 | 1 | `pace_db` | `postgres:15-alpine` | Permanent PostgreSQL database |
 | 2 | `pace_redis` | `redis:7-alpine` | Real-time message broker (sensor snapshots + DB queue) |
-| 3 | `pace_tiles` | `overv/openstreetmap-tile-server` | Offline OSM map tile server |
+| 3 | `pace_tiles` | `overv/openstreetmap-tile-server` | Legacy OSM tile server (optional legacy-tiles profile) |
 | 4 | `pace_web` | (built from `Dockerfile`) | Django app served by Gunicorn (4 workers × 2 threads) |
 | 5 | `pace_worker` | (built from `Dockerfile`) | `sensor_manager.py` — polls I2C/USB sensors every second |
 | 6 | `pace_pgadmin` | `dpage/pgadmin4` | Optional database management UI |
@@ -116,7 +116,7 @@ save_sensor_data command (pace_db_writer)  →  PostgreSQL sensor tables
 |-----------|----------------|---------|---------|
 | `8000` | `443` | nginx | **HTTPS — main entry point for participants & admin** |
 | `8081` | `80` | nginx | HTTP → 301 redirect to HTTPS |
-| `8080` | `80` | tileserver | Offline map tiles (used by the Leaflet map) |
+| `8080` | `80` | tileserver | Optional legacy tile server |
 | `5050` | `80` | pgadmin | Database management UI |
 | `5432` | `5432` | db | PostgreSQL (only needed for local debugging) |
 
@@ -152,19 +152,18 @@ Only admin (`is_staff`) accounts may push GNSS fixes, so participant phones neve
 
 | Path | Access | Description |
 |------|--------|-------------|
-| `/` | login required | Environmental survey (11-question, 7-point Likert, 3 phases) |
-| `/login/` | public | Role-based login (admin → admin home, participant → survey) |
-| `/sign-up/` | public | Self-service participant account creation |
-| `/admin-home/` | admin | Landing page with links to dashboard, map, data browser |
-| `/create-user/` | admin | Create a new participant account |
-| `/map/` | admin | Offline Leaflet map (tiles from `pace_tiles`) |
-| `/dashboard/` | admin | Live sensor telemetry grid (AJAX to `/api/latest-sensors/`) |
-| `/data-browser/` | admin | Tabbed CMS-style tables of the last 200 rows per sensor |
-| `/export-csv/` | admin | Download all sensor data as a CSV (7 tables joined) |
-| `/export-survey-json/` | admin | Download all survey responses as JSON (one entry per survey) |
-| `/api/latest-sensors/` | public | JSON snapshot of the latest Redis sensor reading |
-| `/api/update-gnss/` | admin (POST) | Receive phone GNSS fix + sync Pi system clock |
-| `/admin/` | admin | Built-in Django admin |
+| `/about/`, `/login/`, `/sign-up/` | Public | Project info, Django login, and participant registration |
+| `/` and `/survey/done/` | Signed in | Campaign survey and submission confirmation |
+| `/map/`, `/api/map-data/`, `/tiles/<z>/<x>/<y>.png` | Signed in | Leaflet map, live campaign context, and offline MBTiles |
+| `/admin-home/`, `/create-user/` | Staff | Compatibility redirect to `/about/` and participant account creation |
+| `/campaign/` and `/campaign/{start,abort,unlock-stop,toggle-collect,status,poweroff,stops}/` | Staff | Manage campaigns and route stops |
+| `/sense/`, `/dashboard/`, `/api/sense-system/`, `/api/latest-sensors/` | Staff | SENSE controls, telemetry, and live sensor snapshot |
+| `/api/update-gnss/`, `/api/toggle-collect-mode/` | Staff POST | Receive phone GNSS fixes and manage sensor collection |
+| `/data-browser/`, `/export-{csv,survey-json,weather-csv,amenities-csv}/` | Staff | Browse and export sensor and survey data |
+| `/halo/`, `/halo/dashboard/`, `/halo/data/` | Staff | HALO controls, telemetry, and session browser |
+| `/halo/api/{status,sessions,recordings/start,recordings/stop,poweroff}/` | Staff | HALO status and recording control |
+| `/halo/data/export-summary-csv/`, `/halo/data/<session_id>/export/{zip,<artifact>}/` | Staff | HALO session exports |
+| `/logout/`, `/admin/` | Signed in / staff | Sign out via POST / built-in Django admin |
 
 ### Survey
 
@@ -234,9 +233,19 @@ git clone https://github.com/severinbro/pace-routing.git
 cd pace-routing
 ```
 
-2. Download the OpenStreetMap data for your target region and name it `region.osm.pbf` (e.g. from [Geofabrik](https://www.geofabrik.de/)). Place this file directly into `./data/maps/`. The tile server parses this file on first startup.
+2. Prepare the offline archive from the repository root while internet access is available:
 
-> **First run of the tile server:** The initial import of the `.osm.pbf` file can take a long time depending on the region size. On subsequent starts the tile server skips the import and serves cached tiles. If you need to re-import, remove the `tile-db-data` volume: `docker compose down -v`.
+```bash
+mkdir -p data/maps
+python3 scripts/build_mbtiles.py --output data/maps/offline.next.mbtiles
+mv data/maps/offline.next.mbtiles data/maps/offline.mbtiles
+```
+
+The web container mounts `data/maps/` read-only and serves the archive at
+`/tiles/`. Build replacements under a new filename in the same directory.
+Finish the build and close SQLite, with no pending WAL, before renaming the
+replacement over the live file. For SENSE, use `SENSE/data/maps/` or the
+`maps/` directory inside the configured `PACE_DATA_DIR`.
 
 ### 4. Generate the TLS certificate
 
@@ -252,13 +261,22 @@ This creates `nginx/certs/pace.crt` and `nginx/certs/pace.key`, valid for 10 yea
 
 ### 5. Launch the system
 
-Build and start all containers. The `privileged: true` flag and device mappings in `docker-compose.yml` automatically pass the I2C buses and USB microphone into the `sensor_worker` container.
+Create a persistent Django key in the root `.env` before the first start.
+Keep this file private and reuse the same key across restarts.
+
+```bash
+umask 077
+# For an existing .env, add PACE_DJANGO_SECRET_KEY there only if it is missing.
+printf 'PACE_DJANGO_SECRET_KEY=%s\n' "$(openssl rand -hex 50)" >> .env
+```
+
+Build and start the containers. The `privileged: true` flag and device mappings in `docker-compose.yml` automatically pass the I2C buses and USB microphone into the `sensor_worker` container.
 
 ```bash
 docker compose up --build -d
 ```
 
-The `web` container waits for PostgreSQL to be ready, runs migrations automatically, then starts Gunicorn. Follow the logs to confirm everything came up cleanly:
+The `web` container waits for PostgreSQL to be ready, runs migrations automatically, then collects static files, and starts Gunicorn. Follow the logs to confirm everything came up cleanly:
 
 ```bash
 docker compose logs -f web sensor_worker db_writer
@@ -266,13 +284,13 @@ docker compose logs -f web sensor_worker db_writer
 
 ### 6. Create an admin account
 
-The `web` container runs migrations but does **not** create a user. You need one admin (`is_staff`) account to access the dashboard, map, and data browser, and to act as the GNSS source:
+The `web` container runs migrations but does **not** create a user. You need one admin (`is_staff`) account to access the dashboard, edit route stops, and use the data browser, and to act as the GNSS source:
 
 ```bash
 docker compose exec web python manage.py createsuperuser
 ```
 
-Participants can either self-register via `/sign-up/` or be created by the admin via `/create-user/`. Participant accounts are non-admin (`is_staff=False`) and can only access the survey.
+Participants can either self-register via `/sign-up/` or be created by the admin via `/create-user/`. Participant accounts are non-admin (`is_staff=False`) and can open the survey and map.
 
 ### 7. Access the platform
 
@@ -280,14 +298,13 @@ On any smartphone connected to the Pi's `pace` Wi-Fi, open:
 
 **`https://10.42.0.1:8000`**
 
-- **Participants** are taken straight to the survey after logging in / signing up.
-- **Admins** are redirected to `/admin-home/`, from where the dashboard, map, and data browser are reachable.
+Sign-in opens the project info page at `/about/`. Participants can open the survey and map. Staff also have access to route editing, dashboards, and exports.
 
 Other endpoints (only reachable from the hotspot network):
 
 | URL | Purpose |
 |-----|---------|
-| `http://10.42.0.1:8080` | Map tile server (used internally by Leaflet) |
+| `http://10.42.0.1:8080` | Optional legacy tile server |
 | `http://10.42.0.1:5050` | pgAdmin (credentials configured in `docker-compose.yml`) |
 | `http://10.42.0.1:8081` | HTTP redirect to HTTPS |
 
@@ -348,7 +365,7 @@ See [LICENSE](LICENSE).
 
 The SENSE deployment runs this Django app as `pace-web` behind its local HTTPS
 Nginx endpoint. The existing `/login/` view remains the only browser login.
-After signing in, staff select **SENSE** or **HALO** at `/admin-home/`; HALO's
+After signing in, staff select **SENSE** or **HALO** from the navigation on `/about/`. HALO's
 recording page is `/halo/`. The HALO page uses Django sessions and CSRF and
 proxies fixed status, session, start, and stop operations to SENSE's internal
 control service. Normal participant accounts cannot open HALO controls.
@@ -357,13 +374,13 @@ control service. Normal participant accounts cannot open HALO controls.
 `PACE_DB_*`, `PACE_DJANGO_SECRET_KEY`, `PACE_DEBUG=false`,
 `PACE_ALLOWED_HOSTS`, `PACE_SECURE_COOKIES=true`, `HALO_DASHBOARD_URL`, and
 `HALO_INTERNAL_TOKEN_FILE` there. The token file must be mounted read-only in
-the web container and kept outside Git. The old standalone Compose deployment
-keeps its default settings unless these variables are set.
+the web container and kept outside Git. Both deployments use the same pinned
+web dependencies in `requirements-web.txt`. Standalone sensor dependencies
+are listed in `requirements.txt`.
 
-The SENSE and HALO sections remain available even when the old SENSE sensor
-worker is absent. On the current SENSE Pi, its I²C devices are missing, so
-its sensor charts will have no new readings. HALO capture remains blocked by
-preflight until both camera connectors and required sensors are working.
+The SENSE and HALO pages remain available without a legacy SENSE sensor
+worker. Its charts may then have no new readings. HALO recording is gated
+by its camera, sensor, time synchronization, and storage preflight.
 
 Run the integration tests with:
 
