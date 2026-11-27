@@ -353,7 +353,11 @@ def toggle_collect_mode(request):
 # --- ADMIN-ONLY: DATA BROWSER ---
 @staff_member_required(login_url='admin_login')
 def data_browser(request):
-    """Renders a custom data browser page with tabbed CMS-style tables."""
+    """Renders the SENSE data export page."""
+    return render(request, 'data_cube/data_browser.html')
+
+
+def _sense_reading_tables():
     from data_cube.models import (
         GNSSPhoneMeasurement, GNSSSensorMeasurement,
         AtmosphericMeasurement, AccelerometerMeasurement,
@@ -361,7 +365,7 @@ def data_browser(request):
         EnvironmentSurvey,
     )
 
-    tables = [
+    return [
         {
             'key': 'gnss_phone',
             'label': 'GNSS Phone',
@@ -429,11 +433,6 @@ def data_browser(request):
             )),
         },
     ]
-
-    return render(request, 'data_cube/data_browser.html', {
-        'tables': tables,
-        'collect_mode': r.get('collect_mode') == b'1',
-    })
 
 # --- ADMIN-ONLY: CSV EXPORT ---
 # Import at module level so the (heavy) pandas import happens once at worker
@@ -614,9 +613,10 @@ def _sense_system_metrics() -> dict:
 
 @staff_member_required(login_url='admin_login')
 def sense_home(request):
-    """Renders the SENSE Controller page (recording control, host resources, poweroff)."""
+    """Renders the SENSE Controller with recording controls and saved readings."""
     return render(request, 'data_cube/sense_home.html', {
         'hardware_available': settings.SENSE_HARDWARE_AVAILABLE,
+        'tables': _sense_reading_tables(),
     })
 
 

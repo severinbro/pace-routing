@@ -4,7 +4,7 @@
   <div class="text-center mb-4">
     <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3"><i class="bi bi-cpu"></i></div>
     <h1>SENSE</h1>
-    <p class="text-muted">Control environmental recording and monitor SENSE host resources.</p>
+    <p class="text-muted">Control environmental recording, check host resources, and view saved readings.</p>
     <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
       <a href="{% url 'sense_home' %}" class="btn btn-pace-primary" aria-current="page"><i class="bi bi-sliders"></i> SENSE Controller</a>
       <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
@@ -62,6 +62,55 @@
     </div>
     <div id="sense-message" class="mt-3 fw-bold" role="status"></div>
   </div>
+  <section class="pace-card p-4" id="sense-readings" aria-labelledby="sense-readings-title">
+    <h2 class="pace-section-title" id="sense-readings-title">
+      <span class="pace-icon-tile pace-icon-tile-sun"><i class="bi bi-list-check"></i></span> Sensor readings and surveys
+    </h2>
+    <!-- Tabs -->
+    <div class="pace-tabs">
+        {% for table in tables %}
+        <button type="button" class="pace-tab {% if forloop.first %}active{% endif %}"
+                data-sense-table="{{ table.key }}" aria-controls="table-{{ table.key }}"
+                aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">
+            {{ table.label }}
+            <span class="badge bg-light text-dark ms-1">{{ table.rows|length }}</span>
+        </button>
+        {% endfor %}
+    </div>
+
+    <!-- Tables -->
+    {% for table in tables %}
+    <div id="table-{{ table.key }}" {% if not forloop.first %}hidden{% endif %}>
+        <div class="pace-table-wrap">
+            <table class="pace-data-table">
+                <thead>
+                    <tr>
+                        {% for col in table.columns %}
+                        <th scope="col">{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table.rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{{ table.columns|length }}" class="text-center text-muted py-4">
+                            No data yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small mt-2">Showing latest 200 records.</p>
+    </div>
+    {% endfor %}
+  </section>
 </div>
 
 <script>
@@ -75,6 +124,18 @@
   const el = id => document.getElementById(id);
   const gib = b => b == null ? '—' : (b / 1073741824).toFixed(1) + ' GiB';
   let busy = false;
+
+  const tableButtons = document.querySelectorAll('[data-sense-table]');
+  for (const button of tableButtons) {
+    button.addEventListener('click', () => {
+      for (const tab of tableButtons) {
+        const active = tab === button;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-pressed', String(active));
+        el(tab.getAttribute('aria-controls')).hidden = !active;
+      }
+    });
+  }
 
   async function refresh() {
     if (busy) return;

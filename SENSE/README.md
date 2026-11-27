@@ -262,7 +262,9 @@ Django runs as `pace-web` with PostgreSQL and Redis. Open
 `https://10.42.10.1:18443/login/` to sign in. The login lands on `/about/`.
 `/admin-home/` is a compatibility redirect for staff. Signed-in
 participants can open the survey and `/map/`. Staff can edit route
-stops and use `/sense/`, `/halo/`, dashboards, and exports.
+stops and use the controllers and live sensor dashboards. The SENSE
+Controller at `/sense/` has start/stop controls and tables of saved readings
+and surveys. Use Data & Export at `/data-browser/` for downloads.
 
 `/ui/` redirects to `/halo/`. Django authorizes staff actions with its
 session and CSRF checks, then calls the private control service using an

@@ -32,8 +32,8 @@ Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
 copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account (redirects
 to the project Info page at `/about/`). Staff navigation provides dedicated sections
-for **SENSE** (SENSE Controller `/sense/` with recording control, live CPU/RAM/Storage/temperature
-metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
+for **SENSE** (SENSE Controller `/sense/` with recording control, saved sensor and survey tables,
+live CPU/RAM/Storage/temperature metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
 **HALO** (HALO Controller `/halo/` with recording control, live CPU/RAM/Storage/temperature metrics &
 graceful poweroff, live Sensor Dashboard `/halo/dashboard/`, and Data & Export `/halo/data/`),
 **Campaigns & Participants** (`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`,
@@ -157,9 +157,9 @@ Only admin (`is_staff`) accounts may push GNSS fixes, so participant phones neve
 | `/map/`, `/api/map-data/`, `/tiles/<z>/<x>/<y>.png` | Signed in | Leaflet map, live campaign context, and offline MBTiles |
 | `/admin-home/`, `/create-user/` | Staff | Compatibility redirect to `/about/` and participant account creation |
 | `/campaign/` and `/campaign/{start,abort,unlock-stop,toggle-collect,status,poweroff,stops}/` | Staff | Manage campaigns and route stops |
-| `/sense/`, `/dashboard/`, `/api/sense-system/`, `/api/latest-sensors/` | Staff | SENSE controls, telemetry, and live sensor snapshot |
+| `/sense/`, `/dashboard/`, `/api/sense-system/`, `/api/latest-sensors/` | Staff | SENSE controls, saved readings and surveys, telemetry, and live sensor snapshot |
 | `/api/update-gnss/`, `/api/toggle-collect-mode/` | Staff POST | Receive phone GNSS fixes and manage sensor collection |
-| `/data-browser/`, `/export-{csv,survey-json,weather-csv,amenities-csv}/` | Staff | Browse and export sensor and survey data |
+| `/data-browser/`, `/export-{csv,survey-json,weather-csv,amenities-csv}/` | Staff | Export sensor and survey data |
 | `/halo/`, `/halo/dashboard/`, `/halo/data/` | Staff | HALO controls, telemetry, and session browser |
 | `/halo/api/{status,sessions,recordings/start,recordings/stop,poweroff}/` | Staff | HALO status and recording control |
 | `/halo/data/export-summary-csv/`, `/halo/data/<session_id>/export/{zip,<artifact>}/` | Staff | HALO session exports |
