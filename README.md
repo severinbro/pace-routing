@@ -32,9 +32,11 @@ Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
 copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account (redirects
 to the project Info page at `/about/`). Staff navigation provides dedicated sections
-for **SENSE** (live Sensor Dashboard `/dashboard/` and Data & Export `/data-browser/`),
-**HALO** (HALO Controller `/halo/`, live Sensor Dashboard `/halo/dashboard/`, and
-Data & Export `/halo/data/`), **Campaigns & Participants**
+for **SENSE** (SENSE Controller `/sense/` with recording control, live CPU/RAM/Storage/temperature
+metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
+**HALO** (HALO Controller `/halo/` with recording control, live CPU/RAM/Storage/temperature metrics &
+graceful poweroff, live Sensor Dashboard `/halo/dashboard/`, and Data & Export `/halo/data/`),
+**Campaigns & Participants**
 (`/campaign/`, including SENSE host poweroff), and **Map** (`/map/`, backed by a lightweight
 offline MBTiles SQLite archive at `SENSE/data/maps/offline.mbtiles` served directly via
 `/tiles/{z}/{x}/{y}.png` — generate with `python3 scripts/build_mbtiles.py`), along with a

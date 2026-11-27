@@ -216,6 +216,72 @@ def telemetry():
     }
 
 
+def _read_cpu_times():
+    try:
+        line = Path('/proc/stat').read_text().splitlines()[0]
+        parts = [int(v) for v in line.split()[1:9]]
+        idle = parts[3] + (parts[4] if len(parts) > 4 else 0)
+        return sum(parts), idle
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def system_metrics():
+    cpu_pct = None
+    t1 = _read_cpu_times()
+    if t1 is not None:
+        time.sleep(0.12)
+        t2 = _read_cpu_times()
+        if t2 is not None and t2[0] > t1[0]:
+            total_d = t2[0] - t1[0]
+            idle_d = t2[1] - t1[1]
+            cpu_pct = round(max(0.0, min(100.0, 100.0 * (total_d - idle_d) / total_d)), 1)
+
+    mem_total = mem_avail = None
+    try:
+        for line in Path('/proc/meminfo').read_text().splitlines():
+            if line.startswith('MemTotal:'):
+                mem_total = int(line.split()[1]) * 1024
+            elif line.startswith('MemAvailable:'):
+                mem_avail = int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        pass
+    mem_used = (mem_total - mem_avail) if (mem_total and mem_avail is not None) else None
+    mem_pct = round(100.0 * mem_used / mem_total, 1) if (mem_total and mem_used is not None) else None
+
+    try:
+        du = shutil.disk_usage(DATA if DATA.exists() else ROOT)
+        disk_total, disk_used, disk_free = du.total, du.used, du.free
+        disk_pct = round(100.0 * disk_used / disk_total, 1) if disk_total else None
+    except OSError:
+        disk_total = disk_used = disk_free = disk_pct = None
+
+    temp_c = None
+    try:
+        temp_c = round(int(Path('/sys/class/thermal/thermal_zone0/temp').read_text().strip()) / 1000.0, 1)
+    except (OSError, ValueError):
+        pass
+
+    try:
+        load_1m = round(os.getloadavg()[0], 2)
+    except OSError:
+        load_1m = None
+
+    return {
+        'cpu_percent': cpu_pct,
+        'cpu_count': os.cpu_count(),
+        'load_1m': load_1m,
+        'cpu_temp_c': temp_c,
+        'mem_total_bytes': mem_total,
+        'mem_used_bytes': mem_used,
+        'mem_percent': mem_pct,
+        'disk_total_bytes': disk_total,
+        'disk_used_bytes': disk_used,
+        'disk_free_bytes': disk_free,
+        'disk_percent': disk_pct,
+    }
+
+
 def status():
     state = load_json(STATE)
     running = active()
@@ -234,7 +300,7 @@ def status():
     return {'online': True, 'recording_active': running, 'stage': stage,
             'session_id': state.get('session_id'), 'stop_reason': state.get('stop_reason'),
             'error': state.get('error'), 'readiness': readiness(),
-            'telemetry': telemetry(), 'sessions': items}
+            'telemetry': telemetry(), 'system': system_metrics(), 'sessions': items}
 
 
 def start():

@@ -50,5 +50,6 @@ urlpatterns = [
 
     # --- API ENDPOINTS ---
     path('api/latest-sensors/', views.api_latest_sensors, name='api_latest_sensors'),
+    path('api/sense-system/', views.sense_system_status, name='sense_system_status'),
     path('api/update-gnss/', views.api_update_gnss, name='api_update_gnss'),
 ]

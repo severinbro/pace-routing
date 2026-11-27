@@ -10,6 +10,7 @@
         <h1>SENSE</h1>
         <p class="text-muted">Browse and export collected sensor and survey data.</p>
         <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+            <a href="{% url 'sense_home' %}" class="btn btn-pace-outline"><i class="bi bi-sliders"></i> SENSE Controller</a>
             <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
             <a href="{% url 'data_browser' %}" class="btn btn-pace-sky" aria-current="page"><i class="bi bi-database"></i> Data &amp; Export</a>
         </div>

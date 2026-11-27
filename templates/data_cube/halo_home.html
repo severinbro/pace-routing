@@ -11,8 +11,26 @@
   <div class="row g-3 mb-3">
     <div class="col-6 col-xl-3"><div class="pace-card p-3 h-100"><small class="text-muted text-uppercase fw-bold">Connection</small><div id="halo-connection" class="fs-3 fw-bold">Checking…</div><small id="halo-error" class="text-muted"></small></div></div>
     <div class="col-6 col-xl-3"><div class="pace-card p-3 h-100"><small class="text-muted text-uppercase fw-bold">Recording</small><div id="halo-stage" class="fs-3 fw-bold">—</div><small id="halo-session" class="text-muted font-monospace"></small></div></div>
-    <div class="col-6 col-xl-3"><div class="pace-card p-3 h-100"><small class="text-muted text-uppercase fw-bold">HALO storage</small><div id="halo-disk" class="fs-3 fw-bold">—</div><small class="text-muted">Stops at 4 GiB free</small></div></div>
+    <div class="col-6 col-xl-3"><div class="pace-card p-3 h-100"><small class="text-muted text-uppercase fw-bold">HALO storage</small><div id="halo-disk" class="fs-3 fw-bold">—</div><div class="progress mt-1 mb-1" style="height: 8px;"><div id="halo-disk-bar" class="progress-bar" style="width: 0%; background: var(--pace-sun);"></div></div><small id="halo-disk-detail" class="text-muted">Stops at 4 GiB free</small></div></div>
     <div class="col-6 col-xl-3"><div class="pace-card p-3 h-100"><small class="text-muted text-uppercase fw-bold">Transfer rate</small><div id="halo-rate" class="fs-3 fw-bold">—</div><small id="halo-transfer" class="text-muted"></small></div></div>
+  </div>
+  <div class="row g-3 mb-3">
+    <div class="col-6">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">HALO CPU</small>
+        <div id="halo-cpu" class="fs-3 fw-bold">—</div>
+        <div class="progress mt-1 mb-1" style="height: 8px;"><div id="halo-cpu-bar" class="progress-bar" style="width: 0%; background: var(--pace-mint);"></div></div>
+        <small id="halo-cpu-detail" class="text-muted">Load &amp; temperature</small>
+      </div>
+    </div>
+    <div class="col-6">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">HALO RAM</small>
+        <div id="halo-ram" class="fs-3 fw-bold">—</div>
+        <div class="progress mt-1 mb-1" style="height: 8px;"><div id="halo-ram-bar" class="progress-bar" style="width: 0%; background: var(--pace-sky);"></div></div>
+        <small id="halo-ram-detail" class="text-muted">Memory usage</small>
+      </div>
+    </div>
   </div>
   <div class="pace-card p-4 mb-3">
     <h2 class="pace-section-title"><span class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-record-circle"></i></span> Recording control</h2>
@@ -35,12 +53,22 @@
   async function get(url){const r=await fetch(url,{credentials:'same-origin'});const value=await r.json();if(!r.ok)throw Error(value.error||'Request failed');return value}
   async function refresh(){if(busy)return;try{
     const [result,list]=await Promise.all([get(urls.status),get(urls.sessions)]);
-    const halo=result.halo||{},ready=halo.readiness||{};
+    const halo=result.halo||{},ready=halo.readiness||{},sys=halo.system||{};
+    const gib=b=>b==null?'—':(b/1073741824).toFixed(1)+' GiB';
     el('halo-connection').textContent=halo.online?'Online':'Offline';el('halo-connection').className='fs-3 fw-bold '+(halo.online?'text-success':'text-danger');
     el('halo-error').textContent=halo.error||'Connected through PACE';
     el('halo-stage').textContent=(halo.stage||'idle').replaceAll('_',' ');
     el('halo-session').textContent=halo.session_id||'';
-    el('halo-disk').textContent=ready.free_bytes!=null?(ready.free_bytes/1073741824).toFixed(1)+' GiB':'—';
+    const freeB=sys.disk_free_bytes!=null?sys.disk_free_bytes:ready.free_bytes;
+    el('halo-disk').textContent=freeB!=null?gib(freeB)+' free':'—';
+    el('halo-disk-bar').style.width=(sys.disk_percent!=null?Math.min(100,sys.disk_percent):0)+'%';
+    el('halo-disk-detail').textContent=(sys.disk_used_bytes!=null&&sys.disk_total_bytes!=null)?(gib(sys.disk_used_bytes)+' / '+gib(sys.disk_total_bytes)+' ('+sys.disk_percent.toFixed(0)+'%) · Stops at 4 GiB free'):'Stops at 4 GiB free';
+    el('halo-cpu').textContent=sys.cpu_percent!=null?sys.cpu_percent.toFixed(0)+' %':'—';
+    el('halo-cpu-bar').style.width=(sys.cpu_percent!=null?Math.min(100,sys.cpu_percent):0)+'%';
+    el('halo-cpu-detail').textContent=[sys.load_1m!=null?'Load '+sys.load_1m.toFixed(2):'',sys.cpu_temp_c!=null?sys.cpu_temp_c.toFixed(1)+' °C':''].filter(Boolean).join(' · ')||'Load & temperature';
+    el('halo-ram').textContent=sys.mem_percent!=null?sys.mem_percent.toFixed(0)+' %':'—';
+    el('halo-ram-bar').style.width=(sys.mem_percent!=null?Math.min(100,sys.mem_percent):0)+'%';
+    el('halo-ram-detail').textContent=(sys.mem_used_bytes!=null&&sys.mem_total_bytes!=null)?(gib(sys.mem_used_bytes)+' / '+gib(sys.mem_total_bytes)):'Memory usage';
     el('halo-start').disabled=!halo.online||!ready.ready||halo.recording_active;
     el('halo-stop').disabled=!halo.online||!halo.recording_active;
     el('halo-poweroff').disabled=!halo.online||halo.recording_active;

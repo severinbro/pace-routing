@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid px-2 px-md-4 py-3">
+  <div class="text-center mb-4">
+    <div class="pace-icon-tile pace-icon-tile-mint mx-auto mb-3"><i class="bi bi-cpu"></i></div>
+    <h1>SENSE</h1>
+    <p class="text-muted">Control environmental recording and monitor SENSE host resources.</p>
+    <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+      <a href="{% url 'sense_home' %}" class="btn btn-pace-primary" aria-current="page"><i class="bi bi-sliders"></i> SENSE Controller</a>
+      <a href="{% url 'dashboard_tab' %}" class="btn btn-pace-outline"><i class="bi bi-clipboard-data"></i> Sensor Dashboard</a>
+      <a href="{% url 'data_browser' %}" class="btn btn-pace-outline"><i class="bi bi-database"></i> Data &amp; Export</a>
+    </div>
+  </div>
+
+  {% if not hardware_available %}
+  <div class="alert alert-warning pace-card p-3 mb-3" role="status">
+    The legacy SENSE sensor worker is not configured on this Pi yet. Survey, map, HALO, and admin pages are available; live SENSE environmental readings may be empty.
+  </div>
+  {% endif %}
+
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-xl-3">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">Recording</small>
+        <div id="sense-collect-state" class="fs-3 fw-bold">Checking…</div>
+        <small id="sense-collect-detail" class="text-muted">Sensor persistence</small>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">CPU</small>
+        <div id="sense-cpu" class="fs-3 fw-bold">—</div>
+        <div class="progress mt-1 mb-1" style="height: 8px;"><div id="sense-cpu-bar" class="progress-bar" style="width: 0%; background: var(--pace-mint);"></div></div>
+        <small id="sense-cpu-detail" class="text-muted">Load &amp; temperature</small>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">RAM</small>
+        <div id="sense-ram" class="fs-3 fw-bold">—</div>
+        <div class="progress mt-1 mb-1" style="height: 8px;"><div id="sense-ram-bar" class="progress-bar" style="width: 0%; background: var(--pace-sky);"></div></div>
+        <small id="sense-ram-detail" class="text-muted">Memory usage</small>
+      </div>
+    </div>
+    <div class="col-6 col-xl-3">
+      <div class="pace-card p-3 h-100">
+        <small class="text-muted text-uppercase fw-bold">SENSE Storage</small>
+        <div id="sense-disk" class="fs-3 fw-bold">—</div>
+        <div class="progress mt-1 mb-1" style="height: 8px;"><div id="sense-disk-bar" class="progress-bar" style="width: 0%; background: var(--pace-sun);"></div></div>
+        <small id="sense-disk-detail" class="text-muted">Free / total SSD</small>
+      </div>
+    </div>
+  </div>
+
+  <div class="pace-card p-4 mb-3">
+    <h2 class="pace-section-title"><span class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-record-circle"></i></span> Recording control</h2>
+    <p class="text-muted">Start or stop continuous SENSE environmental sensor logging to PostgreSQL, or gracefully shut down the SENSE Raspberry Pi (disconnects PACE Wi-Fi and the web interface).</p>
+    <div class="d-flex gap-2 flex-wrap">
+      <button type="button" id="sense-start" class="btn btn-pace-mint" disabled><i class="bi bi-play-fill"></i> Start recording</button>
+      <button type="button" id="sense-stop" class="btn btn-pace-primary" disabled><i class="bi bi-stop-fill"></i> Stop recording</button>
+      <button type="button" id="sense-poweroff" class="btn btn-outline-danger ms-auto"><i class="bi bi-power"></i> Power off SENSE</button>
+    </div>
+    <div id="sense-message" class="mt-3 fw-bold" role="status"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const urls = {
+    system: '{% url "sense_system_status" %}',
+    toggle: '{% url "toggle_collect_mode" %}',
+    poweroff: '{% url "campaign_poweroff" %}'
+  };
+  const csrf = document.getElementById('csrf-token').value;
+  const el = id => document.getElementById(id);
+  const gib = b => b == null ? '—' : (b / 1073741824).toFixed(1) + ' GiB';
+  let busy = false;
+
+  async function refresh() {
+    if (busy) return;
+    try {
+      const res = await fetch(urls.system, { credentials: 'same-origin' });
+      const data = await res.json();
+      if (!res.ok) throw Error(data.error || 'Request failed');
+      const collecting = Boolean(data.collect_mode);
+      const sys = data.system || {};
+
+      el('sense-collect-state').textContent = collecting ? 'Recording' : 'Idle';
+      el('sense-collect-state').className = 'fs-3 fw-bold ' + (collecting ? 'text-success' : 'text-muted');
+      el('sense-collect-detail').textContent = collecting ? 'Persisting sensor readings' : 'Live preview only';
+      el('sense-start').disabled = collecting;
+      el('sense-stop').disabled = !collecting;
+
+      const cpuPct = sys.cpu_percent;
+      el('sense-cpu').textContent = cpuPct != null ? cpuPct.toFixed(0) + ' %' : '—';
+      el('sense-cpu-bar').style.width = (cpuPct != null ? Math.min(100, cpuPct) : 0) + '%';
+      const loadStr = sys.load_1m != null ? ('Load ' + sys.load_1m.toFixed(2)) : '';
+      const tempStr = sys.cpu_temp_c != null ? (sys.cpu_temp_c.toFixed(1) + ' °C') : '';
+      el('sense-cpu-detail').textContent = [loadStr, tempStr].filter(Boolean).join(' · ') || 'CPU usage';
+
+      const memPct = sys.mem_percent;
+      el('sense-ram').textContent = memPct != null ? memPct.toFixed(0) + ' %' : '—';
+      el('sense-ram-bar').style.width = (memPct != null ? Math.min(100, memPct) : 0) + '%';
+      el('sense-ram-detail').textContent = (sys.mem_used_bytes != null && sys.mem_total_bytes != null)
+        ? (gib(sys.mem_used_bytes) + ' / ' + gib(sys.mem_total_bytes))
+        : 'Memory usage';
+
+      const diskPct = sys.disk_percent;
+      el('sense-disk').textContent = gib(sys.disk_free_bytes) + ' free';
+      el('sense-disk-bar').style.width = (diskPct != null ? Math.min(100, diskPct) : 0) + '%';
+      el('sense-disk-detail').textContent = (sys.disk_used_bytes != null && sys.disk_total_bytes != null)
+        ? (gib(sys.disk_used_bytes) + ' / ' + gib(sys.disk_total_bytes) + ' (' + diskPct.toFixed(0) + '%)')
+        : 'Storage usage';
+    } catch (err) {
+      el('sense-collect-state').textContent = 'Error';
+      el('sense-collect-state').className = 'fs-3 fw-bold text-danger';
+      el('sense-collect-detail').textContent = err.message;
+    }
+  }
+
+  async function setCollect(active) {
+    busy = true;
+    const msg = el('sense-message');
+    msg.className = 'mt-3 fw-bold text-muted';
+    msg.textContent = active ? 'Starting SENSE sensor recording…' : 'Stopping SENSE sensor recording…';
+    try {
+      const res = await fetch(urls.toggle, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'X-CSRFToken': csrf,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'active=' + (active ? '1' : '0')
+      });
+      const data = await res.json();
+      if (!res.ok) throw Error(data.error || 'Request failed');
+      msg.className = 'mt-3 fw-bold text-success';
+      msg.textContent = data.collect_mode ? 'SENSE sensor recording active.' : 'SENSE sensor recording stopped.';
+    } catch (err) {
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = 'Recording control error: ' + err.message;
+    } finally {
+      busy = false;
+      refresh();
+    }
+  }
+
+  el('sense-start').onclick = () => setCollect(true);
+  el('sense-stop').onclick = () => setCollect(false);
+  el('sense-poweroff').onclick = async () => {
+    if (!confirm('Shut down the SENSE Raspberry Pi?\n\nThis will also disconnect the PACE Wi-Fi and dashboard.')) return;
+    if (!confirm('Final confirmation: Power off SENSE now?')) return;
+    const msg = el('sense-message');
+    msg.className = 'mt-3 fw-bold text-warning';
+    msg.textContent = 'Requesting graceful shutdown of SENSE…';
+    try {
+      const response = await fetch(urls.poweroff, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRFToken': csrf } });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Poweroff request failed');
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = 'SENSE is shutting down gracefully. Wait ~15 seconds before disconnecting power.';
+    } catch (err) {
+      msg.className = 'mt-3 fw-bold text-danger';
+      msg.textContent = 'SENSE poweroff error: ' + err.message;
+    }
+  };
+
+  refresh();
+  setInterval(refresh, 2500);
+})();
+</script>
+{% endblock %}

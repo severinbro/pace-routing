@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 from django.conf import settings
-import redis, json, subprocess, logging, os, sqlite3
+import redis, json, subprocess, logging, os, sqlite3, shutil, time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -402,10 +402,95 @@ def admin_home(request):
     return redirect('about')
 
 
+def _read_proc_cpu_times():
+    try:
+        line = Path('/proc/stat').read_text().splitlines()[0]
+        parts = [int(v) for v in line.split()[1:9]]
+        idle = parts[3] + (parts[4] if len(parts) > 4 else 0)
+        return sum(parts), idle
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def _sense_system_metrics() -> dict:
+    """Collect lightweight host CPU, RAM, disk, and temperature metrics via procfs/stdlib."""
+    cpu_pct = None
+    t1 = _read_proc_cpu_times()
+    if t1 is not None:
+        time.sleep(0.1)
+        t2 = _read_proc_cpu_times()
+        if t2 is not None and t2[0] > t1[0]:
+            total_d = t2[0] - t1[0]
+            idle_d = t2[1] - t1[1]
+            cpu_pct = round(max(0.0, min(100.0, 100.0 * (total_d - idle_d) / total_d)), 1)
+
+    mem_total = mem_avail = None
+    try:
+        for line in Path('/proc/meminfo').read_text().splitlines():
+            if line.startswith('MemTotal:'):
+                mem_total = int(line.split()[1]) * 1024
+            elif line.startswith('MemAvailable:'):
+                mem_avail = int(line.split()[1]) * 1024
+    except (OSError, ValueError):
+        pass
+    mem_used = (mem_total - mem_avail) if (mem_total and mem_avail is not None) else None
+    mem_pct = round(100.0 * mem_used / mem_total, 1) if (mem_total and mem_used is not None) else None
+
+    data_path = Path(settings.SENSE_DATA_DIR)
+    try:
+        du = shutil.disk_usage(data_path if data_path.exists() else Path('/'))
+        disk_total, disk_used, disk_free = du.total, du.used, du.free
+        disk_pct = round(100.0 * disk_used / disk_total, 1) if disk_total else None
+    except OSError:
+        disk_total = disk_used = disk_free = disk_pct = None
+
+    temp_c = None
+    try:
+        temp_c = round(int(Path('/sys/class/thermal/thermal_zone0/temp').read_text().strip()) / 1000.0, 1)
+    except (OSError, ValueError):
+        pass
+
+    try:
+        load_1m = round(os.getloadavg()[0], 2)
+    except (OSError, AttributeError):
+        load_1m = None
+
+    return {
+        'cpu_percent': cpu_pct,
+        'cpu_count': os.cpu_count(),
+        'load_1m': load_1m,
+        'cpu_temp_c': temp_c,
+        'mem_total_bytes': mem_total,
+        'mem_used_bytes': mem_used,
+        'mem_percent': mem_pct,
+        'disk_total_bytes': disk_total,
+        'disk_used_bytes': disk_used,
+        'disk_free_bytes': disk_free,
+        'disk_percent': disk_pct,
+    }
+
+
 @staff_member_required(login_url='admin_login')
 def sense_home(request):
-    """Redirect /sense/ directly to the SENSE Sensor Dashboard."""
-    return redirect('dashboard_tab')
+    """Renders the SENSE Controller page (recording control, host resources, poweroff)."""
+    return render(request, 'data_cube/sense_home.html', {
+        'hardware_available': settings.SENSE_HARDWARE_AVAILABLE,
+    })
+
+
+@staff_member_required(login_url='admin_login')
+def sense_system_status(request):
+    """Returns SENSE collection status and live CPU/RAM/Storage metrics."""
+    try:
+        state = campaign_state()
+    except redis.RedisError:
+        state = {'active': False, 'total_stops': 0, 'current_stop': 0, 'collect_mode': False, 'submitted_stops': []}
+    return JsonResponse({
+        'collect_mode': state['collect_mode'],
+        'campaign': state,
+        'system': _sense_system_metrics(),
+        'mbtiles_available': Path(settings.OFFLINE_MBTILES_PATH).is_file(),
+    })
 
 # --- ADMIN-ONLY: CAMPAIGN HUB ---
 @staff_member_required(login_url='admin_login')
