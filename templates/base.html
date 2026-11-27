@@ -41,14 +41,17 @@
                 <a class="nav-item nav-link {% if request.resolver_match.url_name == 'campaign_hub' or request.resolver_match.url_name == 'create_user' %}active{% endif %}" href="{% url 'campaign_hub' %}" title="Campaigns &amp; Participants">
                     <i class="bi bi-clipboard2-data-fill"></i>
                 </a>
-                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}" title="Map">
-                    <i class="bi bi-map"></i>
-                </a>
             {% endif %}
 
             <a class="nav-item nav-link {% if request.resolver_match.url_name == 'surveys_tab' %}active{% endif %}" href="{% url 'surveys_tab' %}" title="Participant Survey">
                 <i class="bi bi-clipboard-check"></i>
             </a>
+
+            {% if request.user.is_authenticated and request.user.is_staff %}
+                <a class="nav-item nav-link {% if request.resolver_match.url_name == 'map_tab' %}active{% endif %}" href="{% url 'map_tab' %}" title="Map">
+                    <i class="bi bi-map"></i>
+                </a>
+            {% endif %}
 
             <div class="d-flex align-items-center ms-auto flex-shrink-0">
                 <button type="button" id="theme-toggle" class="nav-item nav-link btn btn-link border-0 text-decoration-none" title="Toggle dark mode" aria-label="Toggle dark mode">
