@@ -43,8 +43,12 @@ SECURE_SSL_REDIRECT = False  # nginx handles the redirect
 # direct Gunicorn access during local debugging.
 _DEFAULT_CSRF_ORIGINS = [
     'https://10.42.10.1',
+    'https://10.42.10.1:8000',
     'https://10.42.10.1:18443',
+    'https://pace-routing.local',
+    'https://pace-routing.local:8000',
     'https://pace-sense.local',
+    'https://pace-sense.local:8000',
     'https://pace-sense.local:18443',
     'https://10.42.0.1',
     'https://10.42.0.1:8000',

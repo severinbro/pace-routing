@@ -14,12 +14,12 @@ if [[ -f "$CRT" && -f "$KEY" ]]; then
   exit 0
 fi
 
-echo "Erzeuge selbstsigniertes TLS-Zertifikat für SENSE (pace-sense.local)..."
+echo "Erzeuge selbstsigniertes TLS-Zertifikat für SENSE (pace-routing.local / pace-sense.local)..."
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout "$KEY" \
   -out "$CRT" \
-  -subj "/CN=pace-sense.local/O=PACE/OU=SENSE" \
-  -addext "subjectAltName = DNS:pace-sense.local,DNS:localhost,IP:127.0.0.1,IP:10.42.10.1"
+  -subj "/CN=pace-routing.local/O=PACE/OU=SENSE" \
+  -addext "subjectAltName = DNS:pace-routing.local,DNS:pace-sense.local,DNS:localhost,IP:127.0.0.1,IP:10.42.10.1"
 
 chmod 600 "$KEY"
 chmod 644 "$CRT"

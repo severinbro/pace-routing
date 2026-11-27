@@ -30,7 +30,7 @@ Run `docker compose` from the directory for the Pi you are operating.
 
 Runtime data, `.env` files, certificates, SSH keys and tokens stay on their
 respective Pi and are excluded from Git and from the other Pi's mirrored code
-copy. Sign in at `https://10.42.10.1:18443/login/` with a Django account (redirects
+copy. Sign in at `https://pace-routing.local:8000/login/` (or `https://10.42.10.1:8000/login/`) with a Django account (redirects
 to the project Info page at `/about/`). Staff navigation provides dedicated sections
 for **SENSE** (SENSE Controller `/sense/` with recording control, saved sensor and survey tables,
 live CPU/RAM/Storage/temperature metrics & graceful poweroff, live Sensor Dashboard `/dashboard/`, and Data & Export `/data-browser/`),
