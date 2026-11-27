@@ -484,3 +484,72 @@ h1, h2, h3, h4, h5, h6 {
 /* Primary sections in the integrated SENSE/HALO admin UI. */
 .pace-navbar .pace-nav-section { display: inline-flex; align-items: center; gap: .45rem; }
 .pace-navbar .pace-nav-section span { font-size: 1rem; font-weight: 900; letter-spacing: .04em; }
+
+/* ============================================================
+   Dark Mode ([data-bs-theme="dark"])
+   ============================================================ */
+[data-bs-theme="dark"] {
+    --pace-bg:        #121426;
+    --pace-navy:      #1C2042;
+    --pace-coral:     #FF6B6B;
+    --pace-mint:      #4ECDC4;
+    --pace-sun:       #FFD93D;
+    --pace-sky:       #6EC6FF;
+    --pace-lavender:  #B19CD9;
+    --pace-ink:       #F1F3FA;
+    --pace-muted:     #9BA3BE;
+    --pace-card:      #1A1E38;
+    --pace-border:    #3A416F;
+}
+
+[data-bs-theme="dark"] .pace-card {
+    color: var(--pace-ink);
+}
+
+[data-bs-theme="dark"] .btn-pace-sun,
+[data-bs-theme="dark"] .btn-pace-sun:hover,
+[data-bs-theme="dark"] .btn-pace-sun:focus,
+[data-bs-theme="dark"] .btn-pace-sky,
+[data-bs-theme="dark"] .pace-icon-tile-sun,
+[data-bs-theme="dark"] .pace-icon-tile-sky,
+[data-bs-theme="dark"] .pace-navbar .nav-link.active {
+    color: #1A1E38 !important;
+}
+
+[data-bs-theme="dark"] .btn-pace-outline:hover,
+[data-bs-theme="dark"] .btn-pace-outline:focus,
+[data-bs-theme="dark"] .btn-check + .btn.btn-pace-outline:hover,
+[data-bs-theme="dark"] .pace-tab:hover {
+    background: var(--pace-border);
+    color: #fff;
+}
+
+[data-bs-theme="dark"] .pace-data-row,
+[data-bs-theme="dark"] .pace-data-table tbody td {
+    border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+
+[data-bs-theme="dark"] .pace-data-table tbody tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+[data-bs-theme="dark"] .pace-data-table tbody tr:hover td {
+    background: rgba(255, 107, 107, 0.16);
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+    background-color: var(--pace-card);
+    color: var(--pace-ink);
+    border-color: var(--pace-border);
+}
+
+[data-bs-theme="dark"] .pace-badge.bg-white {
+    background-color: var(--pace-card) !important;
+    color: var(--pace-ink);
+}
+
+[data-bs-theme="dark"] .border-end,
+[data-bs-theme="dark"] .border-start {
+    border-color: var(--pace-border) !important;
+}

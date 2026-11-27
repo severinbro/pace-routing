@@ -3,6 +3,15 @@
 <html lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <script>
+    (function () {
+        try {
+            var saved = localStorage.getItem('pace-theme');
+            var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        } catch (e) {}
+    })();
+    </script>
     
     <link rel="stylesheet" href="{% static 'css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/leaflet.css' %}">
@@ -23,7 +32,7 @@
             </a>
 
             {% if request.user.is_authenticated and request.user.is_staff %}
-                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' %}active{% endif %}" href="{% url 'sense_home' %}">
+                <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'sense_home' or request.resolver_match.url_name == 'dashboard_tab' or request.resolver_match.url_name == 'data_browser' %}active{% endif %}" href="{% url 'sense_home' %}">
                     <i class="bi bi-cpu"></i> <span>SENSE</span>
                 </a>
                 <a class="nav-item nav-link pace-nav-section {% if request.resolver_match.url_name == 'halo_home' or request.resolver_match.url_name == 'halo_dashboard' or request.resolver_match.url_name == 'halo_data' %}active{% endif %}" href="{% url 'halo_home' %}">
@@ -41,18 +50,23 @@
                 </a>
             {% endif %}
 
-            {% if request.user.is_authenticated %}
-                <form class="nav-item d-flex ms-auto" method="post" action="{% url 'admin_logout' %}">
-                    {% csrf_token %}
-                    <button type="submit" class="nav-link btn btn-link border-0 w-100 text-decoration-none">
-                        <i class="bi bi-box-arrow-right"></i>
-                    </button>
-                </form>
-            {% else %}
-                <a class="nav-item nav-link ms-auto {% if request.resolver_match.url_name == 'admin_login' %}active{% endif %}" href="{% url 'admin_login' %}">
-                    <i class="bi bi-box-arrow-in-right"></i>
-                </a>
-            {% endif %}
+            <div class="d-flex align-items-center ms-auto flex-shrink-0">
+                <button type="button" id="theme-toggle" class="nav-item nav-link btn btn-link border-0 text-decoration-none" title="Toggle dark mode" aria-label="Toggle dark mode">
+                    <i class="bi bi-moon-stars-fill" id="theme-toggle-icon"></i>
+                </button>
+                {% if request.user.is_authenticated %}
+                    <form class="nav-item d-flex" method="post" action="{% url 'admin_logout' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="nav-link btn btn-link border-0 text-decoration-none" title="Sign out" aria-label="Sign out">
+                            <i class="bi bi-box-arrow-right"></i>
+                        </button>
+                    </form>
+                {% else %}
+                    <a class="nav-item nav-link {% if request.resolver_match.url_name == 'admin_login' %}active{% endif %}" href="{% url 'admin_login' %}" title="Sign in" aria-label="Sign in">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                    </a>
+                {% endif %}
+            </div>
 
         </div>
     </nav>
@@ -66,6 +80,49 @@
 
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/leaflet.js' %}"></script>
+    <script>
+    (function () {
+        function applyChartTheme(theme) {
+            if (typeof Chart === 'undefined') return;
+            var isDark = theme === 'dark';
+            Chart.defaults.color = isDark ? '#CBD5E1' : '#2B2D6B';
+            Chart.defaults.borderColor = isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(43, 45, 107, 0.12)';
+            if (Chart.instances) {
+                Object.values(Chart.instances).forEach(function (chart) {
+                    if (chart && typeof chart.update === 'function') {
+                        chart.update('none');
+                    }
+                });
+            }
+        }
+
+        function syncToggleUi(theme) {
+            var icon = document.getElementById('theme-toggle-icon');
+            var btn = document.getElementById('theme-toggle');
+            if (!icon || !btn) return;
+            var isDark = theme === 'dark';
+            icon.className = isDark ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
+            btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+            btn.setAttribute('aria-label', btn.title);
+        }
+
+        var current = document.documentElement.getAttribute('data-bs-theme') || 'light';
+        syncToggleUi(current);
+        applyChartTheme(current);
+
+        var toggleBtn = document.getElementById('theme-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function () {
+                var active = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+                var next = active === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-bs-theme', next);
+                try { localStorage.setItem('pace-theme', next); } catch (e) {}
+                syncToggleUi(next);
+                applyChartTheme(next);
+            });
+        }
+    })();
+    </script>
 
     <!-- Smartphone GNSS Pusher: streams the admin phone's geolocation to the RPi5 -->
     <!-- Only runs for authenticated admin (is_staff) users so non-admin phones don't interfere -->
