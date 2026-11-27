@@ -333,6 +333,29 @@ SENSE deployment shows committed results from its own database. The isolated
 fixture uses a separate database and the standard deployment starts with an
 empty segmentation page until results are committed there.
 
+### Stage the production worker wiring
+
+The optional `compose.segmentation.yaml` overlay configures the durable v2
+receiver and a worker profile. Admission defaults to disabled. From `SENSE/`,
+use `docker compose -f compose.yaml -f compose.segmentation.yaml --profile segmentation config --services`
+to inspect the service list.
+
+Before staging on SENSE, create `config/segmentation-internal.token` with a
+dedicated secret readable by the configured container UID/GID, and add
+`pace-web` to `PACE_ALLOWED_HOSTS` in `config/pace.env`. Set
+`SEGMENTATION_MODEL_DIR` to a directory mounted read-only by the worker. The
+worker's `/data` mount shares the receiver's live state. The preflight checks
+Redis, writable storage, the model mount and authenticated access to the
+result route without producing a result. With the overlay's web service
+running, check it with `docker compose -f compose.yaml -f compose.segmentation.yaml run --rm segmentation-worker python -m hailo_worker.preflight`.
+
+Keep `SEGMENTATION_ADMISSION_ENABLED=false` until the replacement HEF and its
+runtime adapter are verified on SENSE. The receiver requires the Hailo
+worker's readiness heartbeat before accepting a new frame. Keep HALO v2
+sending paused during cutover. To roll back, pause v2 sending and admission,
+then drain or preserve accepted work before stopping the worker. Check the
+dashboard and v1 archive transfer during the pilot.
+
 Remove the isolated stack and its test data when finished.
 
 ```sh

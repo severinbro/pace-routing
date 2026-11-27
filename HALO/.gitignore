@@ -14,3 +14,4 @@ config/sense-server.crt
 data/
 __pycache__/
 *.py[cod]
+config/live-upload.paused

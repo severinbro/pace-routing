@@ -7,13 +7,14 @@ writes frame_%06d.jpg + frame_%06d.meta.json into DATA_ROOT/live_outbox/<id>/.
 """
 
 import argparse
-import json
 import logging
 import os
 from pathlib import Path
 import signal
 import subprocess
 import time
+
+from live_outbox import enforce_cap, locked, sync_dir, write_json
 
 
 LOG = logging.getLogger("halo_live_extract")
@@ -75,7 +76,14 @@ def run_loop(
 ) -> int:
     outbox_dir.mkdir(parents=True, exist_ok=True)
     start_mono_ns = time.monotonic_ns()
-    frame_index = 0
+    max_frames = int(os.getenv("LIVE_OUTBOX_MAX_FRAMES", "120"))
+    max_bytes = int(os.getenv("LIVE_OUTBOX_MAX_BYTES", str(256 << 20)))
+    if max_frames < 1 or max_bytes < 1:
+        raise ValueError("live outbox limits must be positive")
+    with locked(outbox_dir.parent):
+        existing_indices = [int(path.stem.removeprefix("frame_")) for path in outbox_dir.glob("frame_??????.jpg")
+                            if path.stem.removeprefix("frame_").isdecimal()]
+        frame_index = max(existing_indices, default=-1) + 1
     next_tick = time.monotonic() + interval_seconds
 
     while not STOP_REQUESTED:
@@ -88,7 +96,6 @@ def run_loop(
         stem = f"frame_{frame_index:06d}"
         tmp_jpg = outbox_dir / f".{stem}.jpg.tmp"
         final_jpg = outbox_dir / f"{stem}.jpg"
-        tmp_meta = outbox_dir / f".{stem}.meta.json.tmp"
         final_meta = outbox_dir / f"{stem}.meta.json"
 
         capture_utc_ns = start_utc_ns + max(0, time.monotonic_ns() - start_mono_ns)
@@ -101,14 +108,23 @@ def run_loop(
             "capture_utc_ns": capture_utc_ns,
         }
         try:
-            tmp_meta.write_text(json.dumps(meta) + "\n", encoding="utf-8")
-            os.replace(tmp_jpg, final_jpg)
-            os.replace(tmp_meta, final_meta)
+            with locked(outbox_dir.parent):
+                with tmp_jpg.open("rb") as image:
+                    os.fsync(image.fileno())
+                os.replace(tmp_jpg, final_jpg)
+                sync_dir(outbox_dir)
+                try:
+                    write_json(final_meta, meta)
+                except OSError:
+                    if not final_meta.exists():
+                        final_jpg.unlink(missing_ok=True)
+                    raise
+                enforce_cap(outbox_dir.parent, max_frames, max_bytes)
             frame_index += 1
         except OSError as exc:
             LOG.warning("Failed committing live frame %s: %s", stem, exc)
             tmp_jpg.unlink(missing_ok=True)
-            tmp_meta.unlink(missing_ok=True)
+            frame_index += 1
     return 0
 
 

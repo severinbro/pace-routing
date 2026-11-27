@@ -95,8 +95,8 @@ class LiveUploaderTests(unittest.TestCase):
             )
             captured = {}
 
-            def fake_upload(jpg_path, meta):
-                captured["jpg"] = jpg_path.read_bytes()
+            def fake_upload(jpeg, meta):
+                captured["jpg"] = jpeg
                 captured["meta"] = meta
                 return 201
 
@@ -106,8 +106,74 @@ class LiveUploaderTests(unittest.TestCase):
             self.assertEqual(captured["meta"]["session_id"], session_id)
             self.assertEqual(captured["meta"]["frame_index"], 0)
             self.assertFalse(captured["meta"]["imu_calibrated"])
+            self.assertIsNone(captured["meta"]["qualified_capture_utc_ns"])
             self.assertFalse((sdir / "frame_000000.jpg").exists())
             self.assertFalse((sdir / "frame_000000.meta.json").exists())
+
+    def test_retry_reuses_frozen_frame_and_rejection_unblocks_next_frame(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outbox = root / "live_outbox" / "walk"
+            outbox.mkdir(parents=True)
+            for index in (0, 1):
+                stem = f"frame_{index:06d}"
+                (outbox / f"{stem}.jpg").write_bytes(b"\xff\xd8" + bytes([index]))
+                metadata = {"session_id": "walk", "frame_index": index, "capture_utc_ns": 123}
+                (outbox / f"{stem}.meta.json").write_text(json.dumps(metadata))
+            response = [uploader.UploadError("HTTP 503"), uploader.RejectedLiveFrame(409, "frame_conflict"), 201]
+            with patch.object(uploader, "upload_live_frame", side_effect=response) as upload:
+                with self.assertRaises(uploader.UploadError):
+                    uploader.process_live_outbox_once(root, 120, None, 180)
+                self.assertTrue((outbox / "frame_000000.upload.json").is_file())
+                self.assertTrue(uploader.process_live_outbox_once(root, 120, None, 0))
+                self.assertTrue(uploader.process_live_outbox_once(root, 120, None, 0))
+                self.assertEqual(upload.call_args_list[0], upload.call_args_list[1])
+                self.assertEqual(upload.call_args_list[2].args[1]["frame_index"], 1)
+            evidence, = (root / "live_quarantine").glob("*/reason.json")
+            self.assertEqual(json.loads(evidence.read_bytes())["http_status"], 409)
+
+    def test_configuration_pause_keeps_frame_until_explicit_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outbox = root / "live_outbox" / "walk"
+            outbox.mkdir(parents=True)
+            (outbox / "frame_000000.jpg").write_bytes(b"\xff\xd8jpeg")
+            (outbox / "frame_000000.meta.json").write_text(json.dumps({
+                "session_id": "walk", "frame_index": 0, "capture_utc_ns": 123,
+            }))
+            pause = root / "manual-pause"
+            pause.touch()
+            with patch.dict(os.environ, {"LIVE_UPLOAD_PAUSE_FILE": str(pause)}), patch.object(
+                uploader, "upload_live_frame", side_effect=[uploader.LiveConfigurationError("HTTP 401"), 201],
+            ) as upload:
+                self.assertFalse(uploader.process_live_outbox_once(root, 120, None, 180))
+                upload.assert_not_called()
+                pause.unlink()
+                self.assertFalse(uploader.process_live_outbox_once(root, 120, None, 180))
+                self.assertFalse(uploader.process_live_outbox_once(root, 120, None, 180))
+                self.assertEqual(upload.call_count, 1)
+                (root / "live-upload.configuration-error.json").unlink()
+                self.assertTrue(uploader.process_live_outbox_once(root, 120, None, 180))
+                self.assertEqual(upload.call_args_list[0], upload.call_args_list[1])
+
+    def test_receipt_status_and_identity(self):
+        meta = {"session_id": "walk", "frame_index": 3}
+        self.assertEqual(uploader.check_live_receipt(201, json.dumps({**meta, "state": "accepted", "reason": None}).encode(), meta), 201)
+        with self.assertRaises(uploader.UploadError):
+            uploader.check_live_receipt(201, json.dumps({**meta, "frame_index": 4}).encode(), meta)
+        for status in (429, 503, 507):
+            with self.assertRaises(uploader.UploadError) as raised:
+                uploader.check_live_receipt(status, b"{}", meta)
+            self.assertIs(type(raised.exception), uploader.UploadError)
+        for status in (400, 409, 410, 413):
+            with self.assertRaises(uploader.RejectedLiveFrame):
+                uploader.check_live_receipt(status, b"{}", meta)
+        for status in (302, 401, 403, 404, 405):
+            with self.assertRaises(uploader.LiveConfigurationError):
+                uploader.check_live_receipt(status, b"{}", meta)
+        with patch.dict(os.environ, {"LIVE_UPLOAD_REQUIRE_DURABLE_RECEIPT": "true"}):
+            with self.assertRaises(uploader.LiveConfigurationError):
+                uploader.check_live_receipt(201, json.dumps({**meta, "state": "queued"}).encode(), meta)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,64 @@
+# Opt-in production wiring. The base stack works without these mounts.
+services:
+  receiver:
+    environment:
+      SEGMENTATION_V2_ENABLED: "true"
+      SEGMENTATION_ADMISSION_ENABLED: "${SEGMENTATION_ADMISSION_ENABLED:-false}"
+      SEGMENTATION_REQUIRED_ADAPTER: hailo
+      SEGMENTATION_PENDING_MAX_FRAMES: "${SEGMENTATION_PENDING_MAX_FRAMES:-256}"
+      SEGMENTATION_PENDING_MAX_BYTES: "${SEGMENTATION_PENDING_MAX_BYTES:-2147483648}"
+      SEGMENTATION_LIVE_MAX_BYTES: "${SEGMENTATION_LIVE_MAX_BYTES:-4294967296}"
+      SEGMENTATION_FRAME_ARTIFACT_MAX_BYTES: "${SEGMENTATION_FRAME_ARTIFACT_MAX_BYTES:-1048576}"
+
+  pace-web:
+    environment:
+      SEGMENTATION_INTERNAL_ENABLED: "true"
+      SEGMENTATION_RESULT_TOKEN_FILE: /run/secrets/segmentation_internal
+    volumes:
+      - type: bind
+        source: ./config/segmentation-internal.token
+        target: /run/secrets/segmentation_internal
+        read_only: true
+        bind:
+          create_host_path: false
+
+  segmentation-worker:
+    profiles: ["segmentation"]
+    build:
+      context: .
+      dockerfile: docker/hailo_worker.Dockerfile
+    image: sense-segmentation-worker:local
+    command: ["sh", "-ec", "python -m hailo_worker.preflight && exec python -m hailo_worker.worker"]
+    restart: "on-failure:3"
+    user: "${PACE_UID:-1000}:${PACE_GID:-1000}"
+    environment:
+      REDIS_HOST: pace-redis
+      SEGMENTATION_ADAPTER: hailo
+      SEGMENTATION_RESULT_URL: http://pace-web:8000/internal/segmentation/frames/
+      SEGMENTATION_RESULT_TOKEN_FILE: /run/secrets/segmentation_internal
+    volumes:
+      - ${PACE_DATA_DIR:-./data}:/data
+      - type: bind
+        source: ${SEGMENTATION_MODEL_DIR:-./models/deployed}
+        target: /models
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./config/segmentation-internal.token
+        target: /run/secrets/segmentation_internal
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      pace-redis:
+        condition: service_started
+      pace-web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-m", "hailo_worker.preflight", "--ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+    networks:
+      - sense-net

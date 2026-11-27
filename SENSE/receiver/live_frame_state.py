@@ -194,6 +194,9 @@ class FrameStore:
             if heartbeat is None:
                 raise AdmissionError(503, "admission_unavailable")
             binding = json.loads(heartbeat)
+            required_adapter = os.getenv("SEGMENTATION_REQUIRED_ADAPTER")
+            if required_adapter and binding.get("adapter") != required_adapter:
+                raise AdmissionError(503, "admission_unavailable")
             if binding.get("adapter") == "fixture":
                 index_path = Path(os.environ["SEGMENTATION_FIXTURE_INDEX"])
                 fixture = read_json(index_path)

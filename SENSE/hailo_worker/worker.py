@@ -257,6 +257,8 @@ class Worker:
         self.redis.delete(HEARTBEAT)
 
     def run(self):
+        if os.getenv("SEGMENTATION_ADAPTER") == "hailo":
+            raise SystemExit("Hailo inference requires the replacement HEF and its verified runtime adapter")
         if os.getenv("SEGMENTATION_ADAPTER") != "fixture":
             raise ValueError("select the fixture adapter in an isolated deployment")
         with file_lock(self.store.locks / "worker.lock", blocking=False):

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import struct
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,6 +14,7 @@ import zlib
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "capture/bin"))
 SPEC = importlib.util.spec_from_file_location("thermal_sync", ROOT / "capture/bin/thermal_sync.py")
 thermal = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(thermal)

@@ -262,6 +262,16 @@ Staff can inspect committed frame segmentation in the main **Segmentation**
 section of the SENSE web interface. The page reads results stored on SENSE and
 offers frame previews and exports.
 
+The live JPEG uploader keeps the same frame and metadata on temporary failure.
+It stores permanent rejections and their reasons in `data/live_quarantine/`
+and continues with the next frame. To pause live sending, create
+`config/live-upload.paused`. Capture and v1 archive handling continue on their
+own schedules. If a credential or route error pauses live sending, correct it
+and remove `data/live-upload.configuration-error.json` to resume. Set
+`LIVE_UPLOAD_REQUIRE_DURABLE_RECEIPT=true` when cutting over to SENSE's durable
+v2 receiver. Capture enforces frame and byte limits on the outgoing queue even
+while live sending is paused.
+
 During capture, the uploader can send sampled JPEG previews and capture
 metadata over HTTPS via `POST /halo-upload/v2/sessions/<SESSION_ID>/frames`.
 The receiver authenticates with the shared Bearer token and limits each v2

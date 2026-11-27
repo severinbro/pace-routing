@@ -5,12 +5,14 @@ import importlib.util
 import json
 import math
 from pathlib import Path
+import sys
 import tarfile
 import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "capture/bin"))
 
 
 def module(name, path):

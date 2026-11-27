@@ -10,6 +10,9 @@ config/halo-dashboard-key*
 config/halo-known-hosts*
 config/dashboard-internal.token
 config/pace.env
+config/segmentation-internal.token
+models/deployed/
+**/*.hef
 tests/
 __pycache__/
 *.py[cod]

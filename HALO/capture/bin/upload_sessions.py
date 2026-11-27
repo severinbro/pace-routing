@@ -21,6 +21,8 @@ import threading
 import time
 import uuid
 
+from live_outbox import (enforce_cap, frozen_path, list_frames, locked, quarantine, remove_pair, write_json)
+
 
 LOG = logging.getLogger("halo_upload")
 SESSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
@@ -32,6 +34,16 @@ REQUIRED_FILES = (
 
 class UploadError(RuntimeError):
     """Upload failed or the receiver did not confirm a committed session."""
+
+
+class RejectedLiveFrame(UploadError):
+    def __init__(self, status, detail):
+        super().__init__(detail)
+        self.status = status
+
+
+class LiveConfigurationError(UploadError):
+    """Live delivery needs operator intervention."""
 
 
 def sha256_file(path: Path) -> str:
@@ -248,7 +260,6 @@ def process_session(session_dir: Path, data_root: Path, include_video: bool = Fa
 
 
 LIVE_IMU_TOLERANCE_NS = 250_000_000  # +/- 250 ms
-LIVE_FRAME_RE = re.compile(r"frame_([0-9]{6})\.meta\.json\Z")
 
 
 def _matmul3(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
@@ -370,45 +381,15 @@ def lookup_imu_orientation(
 
 
 def list_live_outbox_frames(outbox_root: Path) -> list[tuple[int, Path, Path]]:
-    """Return all queued live (mtime_ns, meta_path, jpg_path) sorted FIFO."""
-    if not outbox_root.is_dir():
-        return []
-    entries: list[tuple[int, str, int, Path, Path]] = []
-    for session_dir in sorted(outbox_root.iterdir()):
-        if not session_dir.is_dir():
-            continue
-        for meta_path in sorted(session_dir.glob("frame_*.meta.json")):
-            match = LIVE_FRAME_RE.fullmatch(meta_path.name)
-            if not match:
-                continue
-            frame_idx = int(match.group(1))
-            jpg_path = session_dir / f"frame_{frame_idx:06d}.jpg"
-            if not jpg_path.is_file():
-                meta_path.unlink(missing_ok=True)
-                continue
-            try:
-                mtime_ns = meta_path.stat().st_mtime_ns
-            except OSError:
-                continue
-            entries.append((mtime_ns, session_dir.name, frame_idx, meta_path, jpg_path))
-    entries.sort(key=lambda item: (item[0], item[1], item[2]))
-    return [(e[0], e[3], e[4]) for e in entries]
+    return list_frames(outbox_root)
 
 
 def enforce_live_outbox_cap(outbox_root: Path, max_frames: int) -> int:
     """Enforce global FIFO cap across live_outbox by evicting oldest unsent frames."""
     if max_frames < 1:
         return 0
-    frames = list_live_outbox_frames(outbox_root)
-    overflow = len(frames) - max_frames
-    if overflow <= 0:
-        return 0
-    evicted = 0
-    for _, meta_path, jpg_path in frames[:overflow]:
-        jpg_path.unlink(missing_ok=True)
-        meta_path.unlink(missing_ok=True)
-        evicted += 1
-    return evicted
+    with locked(outbox_root):
+        return enforce_cap(outbox_root, max_frames)
 
 
 def build_multipart_frame(jpeg_bytes: bytes, meta: dict) -> tuple[bytes, str]:
@@ -430,7 +411,33 @@ def build_multipart_frame(jpeg_bytes: bytes, meta: dict) -> tuple[bytes, str]:
     return b"".join(parts), f"multipart/form-data; boundary={boundary}"
 
 
-def upload_live_frame(jpg_path: Path, meta: dict) -> int:
+def check_live_receipt(status, raw, meta):
+    if status in (400, 409, 410, 413):
+        raise RejectedLiveFrame(status, f"SENSE HTTP {status}: {raw[:500].decode('utf-8', 'replace')}")
+    if status in (408, 429) or 500 <= status <= 599:
+        raise UploadError(f"SENSE live receiver temporarily unavailable: HTTP {status}")
+    if status not in (200, 201):
+        raise LiveConfigurationError(f"SENSE live receiver returned unexpected HTTP {status}")
+    try:
+        receipt = json.loads(raw)
+        state = receipt["state"]
+        if receipt["session_id"] != meta["session_id"] or type(receipt["frame_index"]) is not int or receipt["frame_index"] != meta["frame_index"]:
+            raise ValueError("receipt belongs to another frame")
+        if state == ("queued" if status == 201 else "exists"):
+            if os.getenv("LIVE_UPLOAD_REQUIRE_DURABLE_RECEIPT", "false").lower() == "true":
+                raise LiveConfigurationError("SENSE returned a legacy live receipt; verify the receiver cutover")
+            if receipt["frame_dir"] != f'{meta["session_id"]}/frame_{meta["frame_index"]:06d}':
+                raise ValueError("incorrect legacy frame directory")
+        elif state == "failed" and status == 200 and isinstance(receipt["reason"], str) and receipt["reason"]:
+            raise RejectedLiveFrame(status, f'SENSE processing failed: {receipt["reason"]}')
+        elif state not in ({201: ("accepted",), 200: ("accepted", "committed")}[status]) or receipt["reason"] is not None:
+            raise ValueError("invalid receipt state")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise UploadError(f"Invalid SENSE live receipt: {exc}") from exc
+    return status
+
+
+def upload_live_frame(jpeg: bytes, meta: dict) -> int:
     connect_host = os.environ.get("SENSE_UPLOAD_HOST", "pace-sense.local").strip()
     tls_name = os.environ.get("SENSE_TLS_NAME", "pace-sense.local").strip()
     port = int(os.environ.get("SENSE_HTTPS_PORT", "443"))
@@ -440,11 +447,14 @@ def upload_live_frame(jpg_path: Path, meta: dict) -> int:
     session_id = str(meta["session_id"])
     if not SESSION_RE.fullmatch(session_id):
         raise ValueError(f"Invalid live session ID: {session_id}")
-    token = token_file.read_text(encoding="utf-8").strip()
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+        context = ssl.create_default_context(cafile=str(ca_file))
+    except (OSError, ValueError) as exc:
+        raise LiveConfigurationError(f"Cannot load live upload credentials: {exc}") from exc
     if not token:
-        raise ValueError(f"Upload token is empty: {token_file}")
-    body, content_type = build_multipart_frame(jpg_path.read_bytes(), meta)
-    context = ssl.create_default_context(cafile=str(ca_file))
+        raise LiveConfigurationError(f"Upload token is empty: {token_file}")
+    body, content_type = build_multipart_frame(jpeg, meta)
     connection = VerifiedTLSConnection(connect_host, tls_name, port, context, timeout)
     path = f"/halo-upload/v2/sessions/{session_id}/frames"
     host_header = tls_name if port == 443 else f"{tls_name}:{port}"
@@ -459,13 +469,13 @@ def upload_live_frame(jpg_path: Path, meta: dict) -> int:
     try:
         connection.request("POST", path, body=body, headers=headers)
         response = connection.getresponse()
-        resp_body = response.read(16 * 1024)
-        if response.status not in (200, 201):
-            raise UploadError(
-                f"SENSE live upload HTTP {response.status}: {resp_body[:500].decode('utf-8', 'replace')}"
-            )
-        return response.status
-    except (OSError, ssl.SSLError, http.client.HTTPException, socket.timeout) as exc:
+        raw = response.read(16 * 1024 + 1)
+        if response.status in (200, 201) and len(raw) > 16 * 1024:
+            raise UploadError("SENSE live receipt exceeds 16 KiB")
+        return check_live_receipt(response.status, raw, meta)
+    except ssl.SSLCertVerificationError as exc:
+        raise LiveConfigurationError(f"SENSE live receiver certificate verification failed: {exc}") from exc
+    except (OSError, http.client.HTTPException) as exc:
         raise UploadError(f"Could not reach SENSE live receiver: {exc}") from exc
     finally:
         connection.close()
@@ -481,47 +491,85 @@ def has_active_partial_session(data_root: Path) -> bool:
     )
 
 
+def freeze_live_frame(data_root, meta_path, jpg_path, r_left_from_imu, image_rotation):
+    raw = json.loads(meta_path.read_bytes())
+    session = meta_path.parent.name
+    index = int(jpg_path.stem.removeprefix("frame_"))
+    capture = raw["capture_utc_ns"]
+    if (
+        session != raw["session_id"] or not SESSION_RE.fullmatch(session) or len(session) > 128
+        or type(raw["frame_index"]) is not int or raw["frame_index"] != index
+        or type(capture) is not int or not 0 <= capture <= 2**63 - 1
+    ):
+        raise ValueError("invalid live frame identity")
+    with jpg_path.open("rb") as stream:
+        jpeg = stream.read((5 << 20) + 1)
+    if len(jpeg) > 5 << 20 or not jpeg.startswith(b"\xff\xd8"):
+        raise ValueError("invalid live JPEG size or signature")
+    identity = hashlib.sha256(jpeg).hexdigest()
+    sidecar = frozen_path(jpg_path)
+    if sidecar.is_file():
+        frozen = json.loads(sidecar.read_bytes())
+        meta = frozen["meta"]
+        if (frozen["sha256"], meta["session_id"], meta["frame_index"], meta["capture_utc_ns"]) != (identity, session, index, capture):
+            raise ValueError("frozen frame identity changed")
+        return jpeg, meta
+    qualified = raw.get("timing_quality") == "qualified" and raw.get("qualified_capture_utc_ns") == capture
+    orientation = (None, None, None, None, False)
+    if qualified:
+        orientation = lookup_imu_orientation(data_root, session, capture, r_left_from_imu, image_rotation=image_rotation)
+    imu_ns, pitch, roll, yaw, calibrated = orientation
+    meta = {
+        "session_id": session, "frame_index": index, "capture_utc_ns": capture,
+        "timing_quality": "qualified" if qualified else "unqualified",
+        "qualified_capture_utc_ns": capture if qualified else None,
+        "imu_utc_ns": imu_ns, "pitch_deg": pitch, "roll_deg": roll,
+        "yaw_deg": yaw, "imu_calibrated": calibrated,
+    }
+    write_json(sidecar, {"sha256": identity, "meta": meta})
+    return jpeg, meta
+
+
 def process_live_outbox_once(
     data_root: Path,
     max_frames: int,
     r_left_from_imu: list[list[float]] | None,
     image_rotation: int,
 ) -> bool:
-    """Process one FIFO frame from DATA_ROOT/live_outbox. Returns True if work was done."""
-    outbox_root = data_root / "live_outbox"
-    evicted = enforce_live_outbox_cap(outbox_root, max_frames)
-    if evicted:
-        LOG.warning("Live outbox exceeded %d frames; evicted %d oldest frame(s)", max_frames, evicted)
-    frames = list_live_outbox_frames(outbox_root)
-    if not frames:
+    """Process one FIFO frame while leaving the v1 sender independent."""
+    pause = Path(os.getenv("LIVE_UPLOAD_PAUSE_FILE", "/etc/halo-camera/config/live-upload.paused"))
+    fault = data_root / "live-upload.configuration-error.json"
+    if pause.exists() or fault.exists():
         return False
-    _, meta_path, jpg_path = frames[0]
-    raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    session_id = str(raw_meta["session_id"])
-    frame_index = int(raw_meta["frame_index"])
-    capture_utc_ns = int(raw_meta["capture_utc_ns"])
-    imu_utc_ns, pitch_deg, roll_deg, yaw_deg, imu_calibrated = lookup_imu_orientation(
-        data_root, session_id, capture_utc_ns, r_left_from_imu, image_rotation=image_rotation
-    )
-    payload_meta = {
-        "session_id": session_id,
-        "frame_index": frame_index,
-        "capture_utc_ns": capture_utc_ns,
-        "imu_utc_ns": imu_utc_ns,
-        "pitch_deg": pitch_deg,
-        "roll_deg": roll_deg,
-        "yaw_deg": yaw_deg,
-        "imu_calibrated": imu_calibrated,
-    }
-    status = upload_live_frame(jpg_path, payload_meta)
-    jpg_path.unlink(missing_ok=True)
-    meta_path.unlink(missing_ok=True)
+    outbox_root = data_root / "live_outbox"
+    with locked(outbox_root):
+        if max_frames > 0:
+            enforce_cap(outbox_root, max_frames)
+        frames = list_frames(outbox_root)
+        if not frames:
+            return False
+        _, meta_path, jpg_path = frames[0]
+        try:
+            jpeg, payload_meta = freeze_live_frame(data_root, meta_path, jpg_path, r_left_from_imu, image_rotation)
+        except (ValueError, KeyError, TypeError, FileNotFoundError) as exc:
+            quarantine(meta_path, jpg_path, f"malformed local frame: {exc}")
+            return True
+    if pause.exists():
+        return False
     try:
-        if not any(meta_path.parent.iterdir()):
-            meta_path.parent.rmdir()
-    except OSError:
-        pass
-    LOG.info("Live frame uploaded (%d): %s frame_%06d", status, session_id, frame_index)
+        status = upload_live_frame(jpeg, payload_meta)
+    except RejectedLiveFrame as exc:
+        with locked(outbox_root):
+            quarantine(meta_path, jpg_path, str(exc), exc.status)
+        return True
+    except LiveConfigurationError as exc:
+        write_json(fault, {"session_id": payload_meta["session_id"], "frame_index": payload_meta["frame_index"],
+                           "reason": str(exc)})
+        LOG.error("Live uploading paused: %s. Resolve it and remove %s", exc, fault)
+        return False
+    with locked(outbox_root):
+        remove_pair(meta_path, jpg_path)
+    LOG.info("Live frame uploaded (%d): %s frame_%06d", status, payload_meta["session_id"], payload_meta["frame_index"])
     return True
 
 
