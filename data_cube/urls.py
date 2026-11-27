@@ -1,9 +1,11 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
+from django.views.generic import RedirectView
 from . import views
 from . import halo_views
 
 urlpatterns = [
+    path('favicon.ico', RedirectView.as_view(url='/static/img/logo_nobg.png', permanent=True)),
     # --- TAB NAVIGATION ---
     # The empty path renders the environmental survey directly
     path('', views.surveys_tab, name='surveys_tab'),
