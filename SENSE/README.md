@@ -282,7 +282,10 @@ HALO preflight checks two cameras, a BNO085 IMU, a BH1750 light sensor, a
 thermal camera, synchronized time, and at least 5 GiB available. Recording
 ends gracefully after at most 30 minutes or when free space reaches 4 GiB.
 SENSE web views can still run without the legacy SENSE sensor hardware.
-Set `SENSE_HARDWARE_AVAILABLE=false` where it is absent.
+The SENSE Compose stack does not include the legacy sensor worker or the
+database writer. Keep `SENSE_HARDWARE_AVAILABLE=false` unless both are
+configured. The Controller shows recording as unavailable in that case.
+Saved readings, surveys, and exports are still available.
 
 The offline map reads a finalized archive at `data/maps/offline.mbtiles`
 inside the configured SENSE data directory. Build replacements in the

@@ -14,7 +14,7 @@
 
   {% if not hardware_available %}
   <div class="alert alert-warning pace-card p-3 mb-3" role="status">
-    The legacy SENSE sensor worker is not configured on this Pi yet. Survey, map, HALO, and admin pages are available; live SENSE environmental readings may be empty.
+    SENSE sensor recording is unavailable on this Pi. Saved readings, surveys, and exports are still available.
   </div>
   {% endif %}
 
@@ -54,7 +54,7 @@
 
   <div class="pace-card p-4 mb-3">
     <h2 class="pace-section-title"><span class="pace-icon-tile pace-icon-tile-mint"><i class="bi bi-record-circle"></i></span> Recording control</h2>
-    <p class="text-muted">Start or stop continuous SENSE environmental sensor logging to PostgreSQL, or gracefully shut down the SENSE Raspberry Pi (disconnects PACE Wi-Fi and the web interface).</p>
+    <p class="text-muted">Request sensor recording when the SENSE sensor worker and database writer are running. Shutting down SENSE disconnects PACE Wi-Fi and the web interface.</p>
     <div class="d-flex gap-2 flex-wrap">
       <button type="button" id="sense-start" class="btn btn-pace-mint" disabled><i class="bi bi-play-fill"></i> Start recording</button>
       <button type="button" id="sense-stop" class="btn btn-pace-primary" disabled><i class="bi bi-stop-fill"></i> Stop recording</button>
@@ -143,13 +143,26 @@
       const res = await fetch(urls.system, { credentials: 'same-origin' });
       const data = await res.json();
       if (!res.ok) throw Error(data.error || 'Request failed');
-      const collecting = Boolean(data.collect_mode);
+      if (busy) return;
+      const collecting = data.collect_mode === true;
+      const statusKnown = data.collect_mode !== null;
+      const available = data.recording_available;
       const sys = data.system || {};
 
-      el('sense-collect-state').textContent = collecting ? 'Recording' : 'Idle';
-      el('sense-collect-state').className = 'fs-3 fw-bold ' + (collecting ? 'text-success' : 'text-muted');
-      el('sense-collect-detail').textContent = collecting ? 'Persisting sensor readings' : 'Live preview only';
-      el('sense-start').disabled = collecting;
+      const state = el('sense-collect-state');
+      const detail = el('sense-collect-detail');
+      state.className = 'fs-3 fw-bold';
+      if (!available) {
+        state.textContent = 'Unavailable';
+        detail.textContent = collecting ? 'A recording request is still set.' : 'Sensor recording is not configured.';
+      } else if (!statusKnown) {
+        state.textContent = 'Status unavailable';
+        detail.textContent = 'Could not read the recording setting.';
+      } else {
+        state.textContent = collecting ? 'Recording requested' : 'Idle';
+        detail.textContent = collecting ? 'Check saved readings to confirm logging.' : 'Live preview only';
+      }
+      el('sense-start').disabled = !available || !statusKnown || collecting;
       el('sense-stop').disabled = !collecting;
 
       const cpuPct = sys.cpu_percent;
@@ -173,6 +186,8 @@
         ? (gib(sys.disk_used_bytes) + ' / ' + gib(sys.disk_total_bytes) + ' (' + diskPct.toFixed(0) + '%)')
         : 'Storage usage';
     } catch (err) {
+      el('sense-start').disabled = true;
+      el('sense-stop').disabled = true;
       el('sense-collect-state').textContent = 'Error';
       el('sense-collect-state').className = 'fs-3 fw-bold text-danger';
       el('sense-collect-detail').textContent = err.message;
@@ -180,7 +195,10 @@
   }
 
   async function setCollect(active) {
+    if (busy) return;
     busy = true;
+    el('sense-start').disabled = true;
+    el('sense-stop').disabled = true;
     const msg = el('sense-message');
     msg.className = 'mt-3 fw-bold text-muted';
     msg.textContent = active ? 'Starting SENSE sensor recording…' : 'Stopping SENSE sensor recording…';
@@ -197,7 +215,7 @@
       const data = await res.json();
       if (!res.ok) throw Error(data.error || 'Request failed');
       msg.className = 'mt-3 fw-bold text-success';
-      msg.textContent = data.collect_mode ? 'SENSE sensor recording active.' : 'SENSE sensor recording stopped.';
+      msg.textContent = data.collect_mode ? 'SENSE sensor recording requested.' : 'SENSE sensor recording request cleared.';
     } catch (err) {
       msg.className = 'mt-3 fw-bold text-danger';
       msg.textContent = 'Recording control error: ' + err.message;

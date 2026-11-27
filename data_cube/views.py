@@ -344,6 +344,8 @@ def toggle_collect_mode(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     active = request.POST.get('active') == '1'
+    if active and not settings.SENSE_HARDWARE_AVAILABLE:
+        return JsonResponse({'error': 'SENSE sensor recording is unavailable.'}, status=409)
     if active:
         r.set('collect_mode', '1')
     else:
@@ -448,23 +450,24 @@ from data_cube.exports import (
 
 
 def _stream_temp_file(path, filename, content_type):
-    def close_and_remove():
+    path = Path(path)
+    file = None
+    try:
+        file = path.open('rb')
+        response = FileResponse(file, as_attachment=True, filename=filename(),
+                                content_type=content_type)
+    except Exception:
         try:
             if file is not None:
                 file.close()
         finally:
-            Path(path).unlink(missing_ok=True)
-
-    file = None
-    try:
-        file = open(path, 'rb')
-        response = FileResponse(file, as_attachment=True, filename=filename(),
-                                content_type=content_type)
-        response._resource_closers.append(close_and_remove)
-        return response
-    except Exception:
-        close_and_remove()
+            path.unlink(missing_ok=True)
         raise
+
+    # FileResponse already registered the original file closer. The WSGI
+    # handler can replace file.close with response.close for file wrappers.
+    response._resource_closers.append(lambda: path.unlink(missing_ok=True))
+    return response
 
 
 @staff_member_required(login_url='admin_login')
@@ -625,10 +628,13 @@ def sense_system_status(request):
     """Returns SENSE collection status and live CPU/RAM/Storage metrics."""
     try:
         state = campaign_state()
+        collect_mode = state['collect_mode']
     except redis.RedisError:
+        collect_mode = None
         state = {'active': False, 'total_stops': 0, 'current_stop': 0, 'collect_mode': False, 'submitted_stops': []}
     return JsonResponse({
-        'collect_mode': state['collect_mode'],
+        'collect_mode': collect_mode,
+        'recording_available': settings.SENSE_HARDWARE_AVAILABLE,
         'campaign': state,
         'system': _sense_system_metrics(),
         'mbtiles_available': Path(settings.OFFLINE_MBTILES_PATH).is_file(),
@@ -906,8 +912,7 @@ def surveys_tab(request):
             r.delete('campaign:active', 'campaign:total_stops',
                      'campaign:current_stop', 'campaign:collect_mode',
                      'campaign:submitted_stops', 'campaign:recorded_stops', 'collect_mode')
-            # Redirect directly with complete=1 so the thank-you screen shows
-            # once; subsequent loads see no active campaign (waiting screen).
+            request.session['survey_campaign_completed'] = True
             return redirect(reverse('surveys_tab') + '?done=1&complete=1')
 
         return redirect('surveys_tab_done')
@@ -921,8 +926,9 @@ def surveys_tab(request):
     #   - thank-you / phase-4 (just submitted via ?done=1, not waiting, not complete)
     #   - waiting (no stop unlocked yet, or participant already submitted this stop)
     #   - survey form (stop unlocked and not yet submitted by this participant)
-    campaign_complete = (campaign_complete_flag or
-                         (state['active'] and state['current_stop'] >= state['total_stops'] and state['total_stops'] > 0))
+    campaign_complete = (
+        submitted and campaign_complete_flag and request.session.pop('survey_campaign_completed', False)
+    )
     # A stop is "done for this participant" if it has already been submitted.
     # The current stop is unlocked (current_stop > 0) but once it's in the
     # submitted set we must keep showing the waiting screen so the form can't
@@ -947,16 +953,7 @@ def surveys_tab(request):
 @login_required(login_url='admin_login')
 def surveys_tab_done(request):
     """Shows the thank-you confirmation after a survey submission."""
-    from django.urls import reverse
-    state = campaign_state()
-    # The campaign keys are deleted when the last stop is submitted, so
-    # state['active'] will be False in that case.  The ?complete=1 flag is set
-    # by the redirect below so the thank-you screen shows once, after which
-    # the survey page returns to the waiting screen (no active campaign).
-    campaign_complete = (state['active'] and
-                         state['current_stop'] >= state['total_stops'] and
-                         state['total_stops'] > 0)
-    return redirect(reverse('surveys_tab') + '?done=1&complete=' + ('1' if campaign_complete else '0'))
+    return redirect(reverse('surveys_tab') + '?done=1')
 
 
 def _capture_gnss_snapshot():

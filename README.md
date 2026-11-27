@@ -379,7 +379,9 @@ web dependencies in `requirements-web.txt`. Standalone sensor dependencies
 are listed in `requirements.txt`.
 
 The SENSE and HALO pages remain available without a legacy SENSE sensor
-worker. Its charts may then have no new readings. HALO recording is gated
+worker. SENSE recording requires both the sensor worker and database writer.
+Without them, staff can still view and export saved readings and surveys.
+HALO recording is gated
 by its camera, sensor, time synchronization, and storage preflight.
 
 Run the integration tests with:

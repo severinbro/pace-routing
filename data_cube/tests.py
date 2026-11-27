@@ -9,6 +9,7 @@ from unittest.mock import patch
 import zipfile
 
 from django.contrib.auth.models import User
+from django.core.signals import request_finished
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -89,6 +90,66 @@ class PlatformNavigationTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(store.set.call_args.args[0], 'gnss_phone')
             self.assertEqual(clock.call_args.args[0], ['date', '-u', '-s', '2026-01-01 12:00:00'])
+
+    def test_last_stop_remains_open_until_survey_is_saved(self):
+        from data_cube.models import EnvironmentSurvey
+
+        data = {}
+        with patch('data_cube.views.r') as store:
+            store.get.side_effect = data.get
+            store.set.side_effect = lambda key, value: data.update({key: str(value).encode()})
+
+            def delete_keys(*keys):
+                for key in keys:
+                    data.pop(key, None)
+
+            store.delete.side_effect = delete_keys
+            self.client.force_login(self.staff)
+            self.assertEqual(self.client.post(reverse('campaign_start'), {'total_stops': 1}).status_code, 200)
+            self.assertEqual(self.client.post(reverse('campaign_unlock_stop')).status_code, 200)
+
+            self.client.force_login(self.participant)
+            url = reverse('surveys_tab')
+            self.assertContains(self.client.get(url), 'id="survey-form"')
+            self.assertNotContains(self.client.get(url), 'This was the last survey of this campaign.')
+            answers = {f'q{i}': 4 for i in range(1, 12)}
+            response = self.client.post(url, answers, follow=True)
+            self.assertContains(response, 'This was the last survey of this campaign.')
+            self.assertNotContains(response, 'id="survey-form"')
+            self.assertTrue(EnvironmentSurvey.objects.filter(user=self.participant, campaign_stop=1).exists())
+            self.assertNotIn('campaign:active', data)
+            self.assertNotContains(self.client.get(url + '?done=1&complete=1'),
+                                   'This was the last survey of this campaign.')
+
+    @override_settings(SENSE_HARDWARE_AVAILABLE=False)
+    def test_unconfigured_sense_does_not_accept_recording_start(self):
+        self.client.force_login(self.staff)
+        toggle = reverse('toggle_collect_mode')
+        with patch('data_cube.views.r') as store:
+            store.get.return_value = b'1'
+            status = self.client.get(reverse('sense_system_status')).json()
+            self.assertFalse(status['recording_available'])
+            self.assertTrue(status['collect_mode'])
+            self.assertEqual(self.client.post(toggle, {'active': '1'}).status_code, 409)
+            store.set.assert_not_called()
+            self.assertFalse(self.client.post(toggle, {'active': '0'}).json()['collect_mode'])
+            store.delete.assert_called_once_with('collect_mode')
+
+    def test_export_closes_once_when_wsgi_wraps_file(self):
+        from data_cube.views import _stream_temp_file
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'export.csv'
+            path.write_bytes(b'id\\n1\\n')
+            response = _stream_temp_file(path, lambda: 'export.csv', 'text/csv')
+            file = response.file_to_stream
+            # Django's WSGI handler redirects the wrapped file close to response.close.
+            file.close = response.close
+            with patch.object(request_finished, 'send') as finished:
+                file.close()
+            finished.assert_called_once()
+            self.assertTrue(file.closed)
+            self.assertFalse(path.exists())
 
     def test_campaign_hub_renders_active_state_before_polling(self):
         self.client.force_login(self.staff)
