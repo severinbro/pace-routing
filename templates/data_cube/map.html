@@ -171,9 +171,10 @@
     }
 
     function syncEditorButtons() {
-        if (!isStaff) return;
+        {% if request.user.is_staff %}
         document.getElementById('btn-undo-stop').disabled = plannedStops.length === 0;
         document.getElementById('btn-clear-stops').disabled = plannedStops.length === 0;
+        {% endif %}
     }
 
     function refreshMap() {
@@ -201,7 +202,8 @@
             .catch(function (err) { console.error("Map fetch error:", err); });
     }
 
-    if (isStaff) {
+    {% if request.user.is_staff %}
+    (function () {
         var editBtn = document.getElementById('btn-edit-stops');
         var undoBtn = document.getElementById('btn-undo-stop');
         var clearBtn = document.getElementById('btn-clear-stops');
@@ -265,7 +267,8 @@
             }]);
             saveStops(next, 'Added Stop ' + next.length);
         });
-    }
+    })();
+    {% endif %}
 
     refreshMap();
     setInterval(refreshMap, 2500);
